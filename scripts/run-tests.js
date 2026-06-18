@@ -4,6 +4,7 @@ const { calculateParkingFee, calculateParkingFeeForVehicle } = require("../utils
 const { recommendParkingLots } = require("../utils/recommendation");
 const { buildMockRecognition, normalizeRecognition, parseJsonFromText } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("../server/modelClient");
+const { cloudbaseConfig } = require("../config/api");
 const api = require("../utils/api");
 const {
   asyncAddVehicle,
@@ -15,6 +16,7 @@ const {
   asyncSaveUserParkingLot,
   asyncUpdateUserParkingLot,
   asyncVoteParkingLot,
+  getLoggedInUser,
   getCurrentVehicleId,
   setCurrentVehicleId,
   updateCurrentUserProfile,
@@ -110,6 +112,17 @@ function installWxStorageMock() {
   return store;
 }
 
+function testTokenRequiredLoginState() {
+  const store = installWxStorageMock();
+  store.parkingLoginState = { loggedAt: Date.now() };
+  store.parkingCurrentUser = { id: "owner_1", nickname: "车主 A" };
+
+  assert.strictEqual(getLoggedInUser(), null);
+
+  store.auth_token = "token";
+  assert.strictEqual(getLoggedInUser().id, "owner_1");
+}
+
 async function testOnlineParkingStorage() {
   const store = installWxStorageMock();
   const owner = {
@@ -120,6 +133,7 @@ async function testOnlineParkingStorage() {
   };
   store.parkingLoginState = { loggedAt: Date.now() };
   store.parkingCurrentUser = owner;
+  store.auth_token = "token";
 
   const calls = [];
   const originalApi = {
@@ -219,6 +233,7 @@ async function testOnlineParkingStorage() {
 async function testOnlineVehicleStorage() {
   const store = installWxStorageMock();
   store.parkingLoginState = { loggedAt: Date.now() };
+  store.auth_token = "token";
   store.parkingCurrentUser = {
     id: "owner_2",
     nickname: "车主 C",
@@ -280,6 +295,35 @@ function testVehicleNormalization() {
   assert.strictEqual(vehicles[0].vehicleTypeLabel, "新能源小型车");
 }
 
+async function testApiErrorMetadata() {
+  installWxStorageMock();
+  const originalCloudbaseEnabled = cloudbaseConfig.enabled;
+  cloudbaseConfig.enabled = false;
+  global.wx.request = (options) => {
+    options.success({
+      statusCode: 401,
+      data: {
+        error: "unauthorized: missing or invalid token",
+        code: "UNAUTHORIZED"
+      }
+    });
+  };
+
+  try {
+    await assert.rejects(
+      () => api.request("POST", "/api/parking-lots", {}),
+      (error) => {
+        assert.strictEqual(error.statusCode, 401);
+        assert.strictEqual(error.code, "UNAUTHORIZED");
+        assert.match(error.message, /unauthorized/);
+        return true;
+      }
+    );
+  } finally {
+    cloudbaseConfig.enabled = originalCloudbaseEnabled;
+  }
+}
+
 async function testSenseNovaClient() {
   const calls = [];
   const originalFetch = global.fetch;
@@ -339,9 +383,11 @@ async function run() {
   testPricing();
   testRecommendation();
   testRecognitionParsing();
+  testTokenRequiredLoginState();
   await testOnlineParkingStorage();
   await testOnlineVehicleStorage();
   testVehicleNormalization();
+  await testApiErrorMetadata();
   await testSenseNovaClient();
   console.log("all tests passed");
 }

@@ -38,6 +38,10 @@ function inferMediaType(path) {
   return "image/jpeg";
 }
 
+function isUnauthorizedError(error) {
+  return error && (error.statusCode === 401 || error.code === "UNAUTHORIZED");
+}
+
 function buildEmptyForm() {
   return {
     name: "", address: "", entrance: "",
@@ -561,7 +565,15 @@ Page({
       setTimeout(() => wx.navigateBack(), 500);
     } catch (e) {
       console.error("Save failed:", e.message);
-      wx.showToast({ title: "保存失败，请检查网络后重试", icon: "none" });
+      if (isUnauthorizedError(e)) {
+        wx.removeStorageSync(LOGIN_KEY);
+        wx.removeStorageSync(CURRENT_USER_KEY);
+        wx.removeStorageSync("auth_token");
+        this.setData({ isLoggedIn: false, loginRequired: true });
+        wx.showToast({ title: "登录已过期，请重新登录", icon: "none" });
+      } else {
+        wx.showToast({ title: e.message || "保存失败，请检查网络后重试", icon: "none" });
+      }
     } finally {
       this.setData({ loading: false });
     }

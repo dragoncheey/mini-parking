@@ -36,7 +36,10 @@ function clearToken() {
 
 function buildApiError(response, fallback) {
   const data = response && response.data ? response.data : {};
-  return new Error(data.error || fallback || "接口返回异常");
+  const error = new Error(data.error || fallback || "接口返回异常");
+  error.statusCode = response && response.statusCode;
+  error.code = data.code || "";
+  return error;
 }
 
 function validateOkResponse(response) {
@@ -165,8 +168,7 @@ function request(method, path, data, options) {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         return res.data;
       }
-      const msg = (res.data && res.data.error) || "请求失败";
-      throw new Error(msg);
+      throw buildApiError(res, "请求失败");
     });
   }
 
@@ -184,8 +186,7 @@ function request(method, path, data, options) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data);
         } else {
-          const msg = (res.data && res.data.error) || "请求失败";
-          reject(new Error(msg));
+          reject(buildApiError(res, "请求失败"));
         }
       },
       fail(err) {

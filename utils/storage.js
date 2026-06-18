@@ -57,6 +57,7 @@ function getLoggedInUser() {
   try {
     const state = wx.getStorageSync(LOGIN_KEY);
     if (!state || !state.loggedAt) return null;
+    if (!api.getToken()) return null;
     return getCurrentUser();
   } catch (error) {
     return null;

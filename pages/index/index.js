@@ -115,7 +115,7 @@ Page({
 
   restoreLogin() {
     const state = wx.getStorageSync(LOGIN_KEY);
-    if (state && state.loggedAt) {
+    if (state && state.loggedAt && api.getToken()) {
       this.setData({
         isLoggedIn: true,
         accountStatusText: "已登录",
