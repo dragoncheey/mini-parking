@@ -4,6 +4,7 @@ const { calculateParkingFee, calculateParkingFeeForVehicle } = require("../utils
 const { recommendParkingLots } = require("../utils/recommendation");
 const { buildMockRecognition, normalizeRecognition, parseJsonFromText } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("../server/modelClient");
+const { extractCloudOpenid, extractOpenid, generateToken } = require("../server/auth");
 const { cloudbaseConfig } = require("../config/api");
 const api = require("../utils/api");
 const {
@@ -94,6 +95,14 @@ function testRecognitionParsing() {
   assert.strictEqual(mock.pricing.billingUnitMinutes, 60);
   assert.strictEqual(mock.pricing.unitPrice, 5);
   assert.strictEqual(mock.pricing.maxDailyPrice, 40);
+}
+
+function testServerAuthHelpers() {
+  const token = generateToken("openid_1");
+  assert.strictEqual(extractOpenid({ headers: { authorization: `Bearer ${token}` } }), "openid_1");
+  assert.strictEqual(extractOpenid({ headers: {} }), null);
+  assert.strictEqual(extractCloudOpenid({ headers: { "x-wx-openid": "cloud_openid" } }), "cloud_openid");
+  assert.strictEqual(extractCloudOpenid({ headers: { "x-wx-from-openid": "from_openid" } }), "from_openid");
 }
 
 function installWxStorageMock() {
@@ -383,6 +392,7 @@ async function run() {
   testPricing();
   testRecommendation();
   testRecognitionParsing();
+  testServerAuthHelpers();
   testTokenRequiredLoginState();
   await testOnlineParkingStorage();
   await testOnlineVehicleStorage();

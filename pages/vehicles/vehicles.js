@@ -8,6 +8,7 @@ const {
   asyncDeleteVehicle
 } = require("../../utils/storage");
 const api = require("../../utils/api");
+const { showErrorModal } = require("../../utils/error");
 
 const LOGIN_KEY = "parkingLoginState";
 const CURRENT_USER_KEY = "parkingCurrentUser";
@@ -135,7 +136,7 @@ Page({
       this.refresh();
     } catch (error) {
       console.error("Login failed:", error.message);
-      wx.showToast({ title: "登录失败，请检查网络", icon: "none" });
+      showErrorModal("登录失败", error, "登录失败，请检查网络或云托管配置。");
     } finally {
       this.setData({ loading: false });
     }

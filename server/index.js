@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { loadLocalEnv } = require("./env");
+const { extractCloudOpenid, extractOpenid, generateToken } = require("./auth");
 const { buildMockRecognition } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("./modelClient");
 const db = require("./db");
@@ -85,27 +86,6 @@ function matchRoute(pattern, method, reqMethod, pathname) {
 // ---------------------------------------------------------------------------
 // Auth helpers
 // ---------------------------------------------------------------------------
-
-function generateToken(openid) {
-  const payload = JSON.stringify({ openid, ts: Date.now() });
-  return Buffer.from(payload).toString("base64");
-}
-
-function decodeToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
-    return payload.openid || null;
-  } catch {
-    return null;
-  }
-}
-
-function extractOpenid(req) {
-  const auth = req.headers["authorization"] || "";
-  if (!auth.startsWith("Bearer ")) return null;
-  const token = auth.slice(7);
-  return decodeToken(token);
-}
 
 // Routes that don't require authentication
 const PUBLIC_ROUTES = [
@@ -275,11 +255,15 @@ async function saveUploadBuffer(buffer, ext) {
 
 async function handleLogin(req, res) {
   const { code, nickname, avatarUrl } = await readJsonBody(req);
-  if (!code) {
+  const cloudOpenid = extractCloudOpenid(req);
+
+  if (!code && !cloudOpenid) {
     return sendError(res, 400, "missing code", "MISSING_CODE");
   }
 
-  const { openid } = await wxCode2Session(code);
+  const { openid } = cloudOpenid
+    ? { openid: cloudOpenid }
+    : await wxCode2Session(code);
   let user = await db.findOrCreateUser(openid);
   if (nickname || avatarUrl) {
     user = await db.updateUserProfile(openid, { nickname, avatarUrl });

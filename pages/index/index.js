@@ -8,6 +8,7 @@ const {
 const api = require("../../utils/api");
 const { formatDuration } = require("../../utils/pricing");
 const { openParkingLocation } = require("../../utils/location");
+const { showErrorModal } = require("../../utils/error");
 
 const app = getApp();
 const LOGIN_KEY = "parkingLoginState";
@@ -201,7 +202,7 @@ Page({
       this.refreshRecommendations();
     } catch (error) {
       console.error("Login failed:", error.message);
-      wx.showToast({ title: "登录失败，请检查网络", icon: "none" });
+      showErrorModal("登录失败", error, "登录失败，请检查网络或云托管配置。");
     } finally {
       this.setData({ loading: false });
     }
