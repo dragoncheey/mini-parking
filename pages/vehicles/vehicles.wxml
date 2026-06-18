@@ -1,0 +1,54 @@
+<view class="page vehicles-page">
+  <view class="header-panel">
+    <text class="page-title">车辆管理</text>
+    <text class="page-copy">当前仅支持小型车辆。选择当前车辆后，停车推荐会按新能源或燃油车规则计算费用。</text>
+    <view class="current-line">
+      <text class="current-label">当前车辆</text>
+      <text class="current-value">{{currentVehicleLabel}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{loginRequired}}" class="login-panel">
+    <text class="login-title">登录后管理车辆</text>
+    <text class="login-copy">车辆只保存在当前用户下，用于区分新能源和燃油车计费。</text>
+    <button class="primary-button login-button" bindtap="login">登录</button>
+  </view>
+
+  <block wx:else>
+    <view class="form-section">
+      <text class="section-title">新增车辆</text>
+      <view class="field">
+        <text class="field-label">车牌号</text>
+        <input class="field-input" value="{{form.plateNumber}}" data-key="plateNumber" bindinput="onInput" placeholder="例如：苏D12345D" />
+      </view>
+      <view class="field">
+        <text class="field-label">车辆类型</text>
+        <picker mode="selector" range="{{vehicleTypeOptions}}" range-key="label" bindchange="onVehicleTypeChange">
+          <view class="picker-value">{{form.vehicleType === 'new_energy' ? '新能源小型车' : '燃油小型车'}}</view>
+        </picker>
+      </view>
+      <button class="primary-button save-button" bindtap="addVehicle">添加车辆</button>
+    </view>
+
+    <view class="list-section">
+      <text class="section-title">我的车辆</text>
+      <view wx:if="{{vehicles.length}}">
+        <view
+          wx:for="{{vehicles}}"
+          wx:key="id"
+          class="vehicle-card {{item.id === currentVehicleId ? 'is-current' : ''}}"
+        >
+          <view class="vehicle-main">
+            <text class="plate-number">{{item.plateNumber}}</text>
+            <text class="vehicle-meta">{{item.vehicleTypeLabel}} · {{item.sizeTypeLabel}}</text>
+          </view>
+          <view class="vehicle-actions">
+            <button class="secondary-button small-button" data-id="{{item.id}}" bindtap="useVehicle">设当前</button>
+            <button class="ghost-button small-button" data-id="{{item.id}}" bindtap="removeVehicle">删除</button>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="empty">{{emptyText}}</view>
+    </view>
+  </block>
+</view>

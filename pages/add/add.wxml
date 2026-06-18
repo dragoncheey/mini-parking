@@ -1,0 +1,150 @@
+<view class="page add-page">
+  <view class="intro">
+    <text class="intro-title">{{pageTitle}}</text>
+    <text class="intro-text">{{introText}}</text>
+  </view>
+
+  <view wx:if="{{loginRequired}}" class="login-panel">
+    <text class="login-title">需要登录后上报</text>
+    <text class="login-copy">登录后保存的停车场会展示你的头像来源，后续也只有你可以维护修改。</text>
+    <button class="primary-button login-button" bindtap="loginAndContinue">登录并继续</button>
+  </view>
+
+  <block wx:else>
+    <view class="form-section">
+      <view class="section-row">
+        <text class="section-title">拍照识别</text>
+        <view class="section-actions">
+          <button class="secondary-button small-button" bindtap="captureEvidence">拍照/上传</button>
+          <button class="ghost-button small-button" disabled="{{recognizeDisabled}}" bindtap="recognizeEvidence">识别</button>
+        </view>
+      </view>
+      <text class="body-hint">{{recognitionStatus}}，{{photoCount}} 张照片</text>
+      <text class="body-copy">{{recognitionHint}}</text>
+      <text wx:if="{{recognitionWarningText}}" class="warning-text">{{recognitionWarningText}}</text>
+      <view wx:if="{{photoCount}}" class="photo-grid">
+        <view
+          wx:for="{{evidencePhotos}}"
+          wx:key="path"
+          class="photo-item"
+        >
+          <image class="photo-thumb" src="{{item.path}}" mode="aspectFill" data-index="{{index}}" bindtap="previewEvidence" />
+          <button class="remove-photo" data-index="{{index}}" bindtap="removeEvidence">×</button>
+        </view>
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="section-title">基础信息</text>
+      <view class="field">
+        <text class="field-label">停车场名称</text>
+        <input class="field-input" value="{{form.name}}" data-key="name" bindinput="onInput" placeholder="例如：星河广场地下停车场" />
+      </view>
+      <view class="field">
+        <text class="field-label">地址</text>
+        <input class="field-input" value="{{form.address}}" data-key="address" bindinput="onInput" placeholder="停车场入口或详细地址" />
+      </view>
+      <view class="field">
+        <text class="field-label">入口提示</text>
+        <input class="field-input" value="{{form.entrance}}" data-key="entrance" bindinput="onInput" placeholder="例如：商场东门旁下坡入口" />
+      </view>
+    </view>
+
+    <view class="form-section">
+      <view class="section-row">
+        <text class="section-title">地图数据</text>
+        <view class="section-actions">
+          <button class="ghost-button small-button" bindtap="chooseParkingLocation">地图选点</button>
+          <button class="ghost-button small-button" bindtap="useCurrentLocation">当前位置</button>
+        </view>
+      </view>
+      <view class="field">
+        <text class="field-label">纬度</text>
+        <input class="field-input" type="digit" value="{{form.latitude}}" data-key="latitude" bindinput="onInput" placeholder="31.23041" />
+      </view>
+      <view class="field">
+        <text class="field-label">经度</text>
+        <input class="field-input" type="digit" value="{{form.longitude}}" data-key="longitude" bindinput="onInput" placeholder="121.47370" />
+      </view>
+      <view class="field">
+        <text class="field-label">高德 POI ID</text>
+        <input class="field-input" value="{{form.amapPoiId}}" data-key="amapPoiId" bindinput="onInput" placeholder="可选，便于后续对齐高德数据" />
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="section-title">默认/燃油车收费规则</text>
+      <view class="two-column">
+        <view class="field">
+          <text class="field-label">免费分钟</text>
+          <input class="field-input" type="number" value="{{form.freeMinutes}}" data-key="freeMinutes" bindinput="onInput" />
+        </view>
+        <view class="field">
+          <text class="field-label">计费单位分钟</text>
+          <input class="field-input" type="number" value="{{form.billingUnitMinutes}}" data-key="billingUnitMinutes" bindinput="onInput" />
+        </view>
+        <view class="field">
+          <text class="field-label">每单位价格</text>
+          <input class="field-input" type="digit" value="{{form.unitPrice}}" data-key="unitPrice" bindinput="onInput" />
+        </view>
+        <view class="field">
+          <text class="field-label">单日封顶</text>
+          <input class="field-input" type="digit" value="{{form.maxDailyPrice}}" data-key="maxDailyPrice" bindinput="onInput" placeholder="可选" />
+        </view>
+      </view>
+      <view class="field">
+        <text class="field-label">规则备注</text>
+        <textarea class="field-textarea" value="{{form.notes}}" data-key="notes" bindinput="onInput" placeholder="例如：1 小时免费，之后每小时 5 元" />
+      </view>
+      <view class="vehicle-rule-box">
+        <view class="switch-row">
+          <view>
+            <text class="field-label">新能源小型车优惠</text>
+            <text class="switch-hint">例如常州市新能源 2 小时免费，超出后按默认规则计费</text>
+          </view>
+          <switch checked="{{form.newEnergyEnabled}}" data-key="newEnergyEnabled" bindchange="onSwitchChange" color="#166a5b" />
+        </view>
+        <view wx:if="{{form.newEnergyEnabled}}">
+          <view class="two-column">
+            <view class="field">
+              <text class="field-label">新能源免费分钟</text>
+              <input class="field-input" type="number" value="{{form.newEnergyFreeMinutes}}" data-key="newEnergyFreeMinutes" bindinput="onInput" />
+            </view>
+            <view class="field">
+              <text class="field-label">新能源计费单位</text>
+              <input class="field-input" type="number" value="{{form.newEnergyBillingUnitMinutes}}" data-key="newEnergyBillingUnitMinutes" bindinput="onInput" placeholder="默认同燃油车" />
+            </view>
+            <view class="field">
+              <text class="field-label">新能源每单位价格</text>
+              <input class="field-input" type="digit" value="{{form.newEnergyUnitPrice}}" data-key="newEnergyUnitPrice" bindinput="onInput" placeholder="默认同燃油车" />
+            </view>
+            <view class="field">
+              <text class="field-label">新能源单日封顶</text>
+              <input class="field-input" type="digit" value="{{form.newEnergyMaxDailyPrice}}" data-key="newEnergyMaxDailyPrice" bindinput="onInput" placeholder="默认同燃油车" />
+            </view>
+          </view>
+          <view class="field">
+            <text class="field-label">新能源备注</text>
+            <textarea class="field-textarea compact-textarea" value="{{form.newEnergyNotes}}" data-key="newEnergyNotes" bindinput="onInput" placeholder="例如：新能源 2 小时免费，之后按停车场默认规则" />
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="section-title">现实因素</text>
+      <view class="field">
+        <text class="field-label">车位情况</text>
+        <picker mode="selector" range="{{availabilityOptions}}" range-key="label" value="{{availabilityIndex}}" bindchange="onAvailabilityChange">
+          <view class="picker-value">{{availabilityLabel}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="field-label">额外步行分钟</text>
+        <input class="field-input" type="number" value="{{form.walkingPenaltyMinutes}}" data-key="walkingPenaltyMinutes" bindinput="onInput" />
+      </view>
+    </view>
+
+    <button class="primary-button save-button" bindtap="save">{{saveButtonText}}</button>
+  </block>
+</view>

@@ -1,0 +1,28 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/vehicles/vehicles",
+    "pages/detail/detail",
+    "pages/add/add"
+  ],
+  "window": {
+    "navigationBarTitleText": "省心停车",
+    "navigationBarBackgroundColor": "#f8fafc",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f6f8"
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于选择目的地推荐更合适的停车场"
+    },
+    "scope.camera": {
+      "desc": "用于拍摄停车场入口或收费牌，辅助识别和复核停车场收费数据"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation",
+    "chooseLocation"
+  ],
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

@@ -1,0 +1,102 @@
+page {
+  min-height: 100%;
+  background: #f4f6f8;
+  color: #18212f;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: 0;
+  overflow-x: hidden;
+}
+
+view,
+text,
+button,
+input,
+textarea,
+picker,
+slider {
+  box-sizing: border-box;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+button::after {
+  border: 0;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24rpx;
+}
+
+.muted {
+  color: #657286;
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 40rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  color: #34506b;
+  background: #eaf2f7;
+  font-size: 22rpx;
+  white-space: nowrap;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 72rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.primary-button {
+  color: #ffffff;
+  background: #166a5b;
+}
+
+.secondary-button {
+  color: #143d35;
+  background: #d9eee9;
+}
+
+.ghost-button {
+  color: #34506b;
+  background: #eef3f6;
+}
+
+.danger-button {
+  color: #8a3a12;
+  background: #fff0e5;
+}
+
+.empty {
+  margin-top: 32rpx;
+  padding: 40rpx 28rpx;
+  border: 1rpx solid #dce4ec;
+  border-radius: 8rpx;
+  background: #ffffff;
+  color: #657286;
+  font-size: 28rpx;
+  line-height: 1.6;
+}

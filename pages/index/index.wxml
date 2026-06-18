@@ -1,0 +1,219 @@
+<view class="page index-page">
+  <view class="top-panel">
+    <view class="title-row">
+      <view>
+        <text class="eyebrow">目的地 3 公里内推荐</text>
+        <text class="page-title">想怎么停</text>
+      </view>
+      <view class="title-actions">
+        <view class="account-chip {{accountStatusClass}}" bindtap="login">
+          <text class="account-dot"></text>
+          <text class="account-status">{{accountStatusText}}</text>
+          <text class="account-action">{{accountActionText}}</text>
+        </view>
+        <button class="secondary-button add-button" bindtap="goAdd">分享停车场</button>
+      </view>
+    </view>
+
+    <view class="destination-panel">
+      <view>
+        <text class="destination-name">{{destinationName}}</text>
+        <text class="destination-address">{{destinationAddress}}</text>
+      </view>
+      <view class="destination-actions">
+        <button class="primary-button destination-button" bindtap="chooseDestination">选地点</button>
+        <button class="ghost-button destination-button" bindtap="useCurrentLocationAsDestination">当前位置</button>
+      </view>
+    </view>
+
+    <view class="vehicle-panel" bindtap="goVehicles">
+      <view>
+        <text class="vehicle-label">当前车辆</text>
+        <text class="vehicle-value">{{currentVehicleText}}</text>
+        <text class="vehicle-hint">{{currentVehicleHint}}</text>
+      </view>
+      <text class="vehicle-action">管理</text>
+    </view>
+
+    <view class="duration-panel">
+      <view class="search-row">
+        <input
+          class="search-input"
+          value="{{destinationKeyword}}"
+          bindinput="onDestinationInput"
+          confirm-type="search"
+          placeholder="输入目的地名称"
+        />
+        <button class="secondary-button choose-button" bindtap="searchDestinationCandidates">匹配目的地</button>
+      </view>
+
+      <view wx:if="{{hasDestinationMatches}}" class="match-panel">
+        <text class="match-title">目的地候选</text>
+        <view
+          wx:for="{{destinationMatches}}"
+          wx:key="id"
+          class="match-row"
+          data-id="{{item.id}}"
+          bindtap="selectDestinationMatch"
+        >
+          <view class="match-info">
+            <text class="match-name">{{item.name}}</text>
+            <text class="match-address">{{item.address}}</text>
+          </view>
+          <text class="match-action">设为目的地</text>
+        </view>
+      </view>
+
+      <view class="search-row">
+        <input
+          class="search-input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          confirm-type="search"
+          placeholder="搜索停车场、地址或标签"
+        />
+        <button wx:if="{{searchKeyword}}" class="ghost-button clear-button" bindtap="clearSearch">清空</button>
+      </view>
+
+      <view wx:if="{{hasParkingSearchResults}}" class="search-results-panel">
+        <view class="search-results-header">
+          <text class="match-title">停车场搜索结果</text>
+          <text class="muted">前 {{parkingSearchResults.length}} 条</text>
+        </view>
+        <view
+          wx:for="{{parkingSearchResults}}"
+          wx:key="id"
+          class="parking-result"
+        >
+          <view class="parking-result-main" data-id="{{item.id}}" bindtap="goDetail">
+            <text class="match-name">{{item.name}}</text>
+            <text class="match-address">{{item.address}}</text>
+            <view class="parking-result-meta">
+              <text>{{item.feeText}}</text>
+              <text>距目的地 {{item.distanceText}}</text>
+            </view>
+            <view class="source-line compact">
+              <view class="source-avatar" style="background: {{item.owner.avatarColor}}">
+                <image wx:if="{{item.owner.avatarUrl}}" class="source-avatar-image" src="{{item.owner.avatarUrl}}" mode="aspectFill" />
+                <text wx:else>{{item.owner.avatarText}}</text>
+              </view>
+              <text class="source-name">{{item.owner.nickname}}</text>
+              <text class="source-confidence">可信度 {{item.confidence}}</text>
+            </view>
+          </view>
+          <view class="parking-result-actions">
+            <text data-id="{{item.id}}" bindtap="useLotAsDestination">设目的地</text>
+            <text data-id="{{item.id}}" bindtap="openNavigation">导航</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="control-header">
+        <text class="section-title">预计停车</text>
+        <text class="duration-value">{{durationText}}</text>
+      </view>
+      <text class="duration-hint">10分钟起，5分钟一档</text>
+      <slider
+        min="{{minDurationMinutes}}"
+        max="{{maxDurationMinutes}}"
+        step="{{durationStepMinutes}}"
+        value="{{durationMinutes}}"
+        activeColor="#166a5b"
+        backgroundColor="#d9e3ea"
+        block-color="#166a5b"
+        block-size="22"
+        bindchange="onDurationSlide"
+      />
+      <view class="quick-row">
+        <view
+          wx:for="{{quickDurations}}"
+          wx:key="minutes"
+          class="quick-chip {{item.activeClass}}"
+          data-minutes="{{item.minutes}}"
+          bindtap="setQuickDuration"
+        >
+          <text class="quick-chip-text">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <map
+    wx:if="{{hasDestination}}"
+    class="map-preview"
+    latitude="{{mapLatitude}}"
+    longitude="{{mapLongitude}}"
+    scale="{{mapScale}}"
+    markers="{{mapMarkers}}"
+    include-points="{{mapPoints}}"
+    show-location="{{hasLocation}}"
+    bindmarkertap="onMarkerTap"
+  ></map>
+
+  <view class="summary-box">
+    <text>{{summary}}</text>
+  </view>
+
+  <view class="list-header">
+    <text class="section-title">目的地 3km 内</text>
+    <text class="muted">{{recommendations.length}} 个停车场</text>
+  </view>
+
+  <block wx:if="{{hasRecommendations}}">
+    <view
+      wx:for="{{recommendations}}"
+      wx:key="id"
+      class="lot-card {{item.bestClass}}"
+    >
+      <view class="lot-main">
+        <view class="rank-badge">{{item.rank}}</view>
+        <view class="lot-info">
+          <view class="lot-title-line">
+            <text class="lot-name">{{item.name}}</text>
+            <text wx:if="{{item.isBest}}" class="best-label">综合推荐</text>
+          </view>
+          <text class="lot-address">{{item.address}}</text>
+        </view>
+        <view class="price-box">
+          <text class="price">{{item.feeText}}</text>
+          <text class="price-note">{{item.durationText}}</text>
+        </view>
+      </view>
+
+      <view class="metric-row">
+        <text>距目的地 {{item.distanceText}}</text>
+        <text>步行约 {{item.walkingMinutes}} 分钟</text>
+        <text>评分 {{item.score}}</text>
+      </view>
+
+      <view class="tag-row">
+        <text
+          wx:for="{{item.tags}}"
+          wx:key="*this"
+          class="pill"
+        >{{item}}</text>
+      </view>
+
+      <text class="reason">{{item.reason}}</text>
+
+      <view class="source-line">
+        <view class="source-avatar" style="background: {{item.owner.avatarColor}}">
+          <image wx:if="{{item.owner.avatarUrl}}" class="source-avatar-image" src="{{item.owner.avatarUrl}}" mode="aspectFill" />
+          <text wx:else>{{item.owner.avatarText}}</text>
+        </view>
+        <text class="source-name">{{item.owner.nickname}}</text>
+        <text class="source-confidence">可信度 {{item.confidence}}</text>
+        <text wx:if="{{item.voteStats.total}}" class="source-confidence">赞 {{item.voteStats.up}} / 踩 {{item.voteStats.down}}</text>
+      </view>
+
+      <view class="action-row">
+        <button class="primary-button action-button" data-id="{{item.id}}" bindtap="openNavigation">导航</button>
+        <button class="ghost-button action-button" data-id="{{item.id}}" bindtap="goDetail">详情</button>
+      </view>
+    </view>
+  </block>
+
+  <view wx:else class="empty">
+    {{emptyText}}
+  </view>
+</view>

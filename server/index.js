@@ -1,0 +1,622 @@
+const http = require("http");
+const https = require("https");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const { loadLocalEnv } = require("./env");
+const { buildMockRecognition } = require("../utils/recognition");
+const { recognizeWithSenseNovaApi } = require("./modelClient");
+const db = require("./db");
+
+loadLocalEnv();
+
+const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || "0.0.0.0";
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function sendJson(res, statusCode, data) {
+  res.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "access-control-allow-headers": "content-type,authorization"
+  });
+  res.end(JSON.stringify(data));
+}
+
+function sendError(res, statusCode, message, code) {
+  sendJson(res, statusCode, { error: message, code: code || "ERROR" });
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (Buffer.byteLength(body) > MAX_BODY_BYTES) {
+        reject(new Error("request body too large"));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (error) {
+        reject(new Error("invalid json body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function parseUrl(req) {
+  return new URL(req.url, "http://localhost");
+}
+
+function parsePathParams(pattern, actual) {
+  const patternParts = pattern.split("/");
+  const actualParts = actual.split("/");
+  const params = {};
+  for (let i = 0; i < patternParts.length; i++) {
+    if (patternParts[i].startsWith(":")) {
+      params[patternParts[i].slice(1)] = decodeURIComponent(actualParts[i] || "");
+    }
+  }
+  return params;
+}
+
+function matchRoute(pattern, method, reqMethod, pathname) {
+  if (reqMethod !== method) return null;
+  const patternParts = pattern.split("/");
+  const pathParts = pathname.split("/");
+  if (patternParts.length !== pathParts.length) return null;
+  for (let i = 0; i < patternParts.length; i++) {
+    if (patternParts[i].startsWith(":")) continue;
+    if (patternParts[i] !== pathParts[i]) return null;
+  }
+  return parsePathParams(pattern, pathname);
+}
+
+// ---------------------------------------------------------------------------
+// Auth helpers
+// ---------------------------------------------------------------------------
+
+function generateToken(openid) {
+  const payload = JSON.stringify({ openid, ts: Date.now() });
+  return Buffer.from(payload).toString("base64");
+}
+
+function decodeToken(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token, "base64").toString("utf8"));
+    return payload.openid || null;
+  } catch {
+    return null;
+  }
+}
+
+function extractOpenid(req) {
+  const auth = req.headers["authorization"] || "";
+  if (!auth.startsWith("Bearer ")) return null;
+  const token = auth.slice(7);
+  return decodeToken(token);
+}
+
+// Routes that don't require authentication
+const PUBLIC_ROUTES = [
+  { method: "POST", prefix: "/api/login" },
+  { method: "GET", prefix: "/health" },
+  { method: "GET", prefix: "/" },
+  { method: "POST", prefix: "/api/recognize-parking" },
+  { method: "GET", prefix: "/api/parking-lots" }, // list endpoint (no auth)
+];
+
+function isPublicRoute(method, pathname) {
+  // Exact match for / and /health
+  if ((method === "GET") && (pathname === "/" || pathname === "/health")) return true;
+  // Exact match for /api/login
+  if (method === "POST" && pathname === "/api/login") return true;
+  // Exact match for /api/recognize-parking
+  if (method === "POST" && pathname === "/api/recognize-parking") return true;
+  // GET /api/parking-lots (list) and GET /api/parking-lots/:id (detail, optional auth)
+  if (method === "GET" && pathname === "/api/parking-lots") return true;
+  if (method === "GET" && pathname.startsWith("/api/parking-lots/") && !pathname.endsWith("/vote")) return true;
+  // GET /uploads/*
+  if (method === "GET" && pathname.startsWith("/uploads/")) return true;
+  // OPTIONS
+  if (method === "OPTIONS") return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// WeChat login
+// ---------------------------------------------------------------------------
+
+function wxCode2Session(code) {
+  const appid = process.env.WX_APPID;
+  const secret = process.env.WX_APP_SECRET;
+
+  if (!appid || !secret) {
+    // Mock mode: use code as openid
+    return Promise.resolve({ openid: code });
+  }
+
+  return new Promise((resolve, reject) => {
+    const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${code}&grant_type=authorization_code`;
+    https
+      .get(url, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.errcode) {
+              reject(new Error(parsed.errmsg || "wx login failed"));
+            } else {
+              resolve({ openid: parsed.openid, session_key: parsed.session_key });
+            }
+          } catch {
+            reject(new Error("invalid wx response"));
+          }
+        });
+      })
+      .on("error", reject);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Multipart parser (simple boundary-based for image uploads)
+// ---------------------------------------------------------------------------
+
+function parseMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const contentType = req.headers["content-type"] || "";
+    const boundaryMatch = contentType.match(/boundary=(.+)(;|$)/);
+    if (!boundaryMatch) {
+      return reject(new Error("missing boundary in content-type"));
+    }
+    const boundary = boundaryMatch[1].trim();
+    const delimiter = Buffer.from(`--${boundary}`);
+    const endDelimiter = Buffer.from(`--${boundary}--`);
+
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("error", reject);
+    req.on("end", () => {
+      try {
+        const buf = Buffer.concat(chunks);
+        const files = [];
+        let pos = 0;
+
+        while (pos < buf.length) {
+          const delimIdx = buf.indexOf(delimiter, pos);
+          if (delimIdx === -1) break;
+
+          const partStart = delimIdx + delimiter.length + 2; // skip \r\n
+          const nextDelimIdx = buf.indexOf(delimiter, partStart);
+          if (nextDelimIdx === -1) break;
+
+          const partEnd = nextDelimIdx - 2; // trim \r\n before delimiter
+          const part = buf.slice(partStart, partEnd);
+
+          // Parse headers
+          const headerEndIdx = part.indexOf("\r\n\r\n");
+          if (headerEndIdx === -1) {
+            pos = nextDelimIdx;
+            continue;
+          }
+
+          const headerStr = part.slice(0, headerEndIdx).toString("utf8");
+          const bodyBuf = part.slice(headerEndIdx + 4);
+
+          // Extract filename from Content-Disposition
+          const nameMatch = headerStr.match(/name="([^"]+)"/);
+          const filenameMatch = headerStr.match(/filename="([^"]+)"/);
+          if (filenameMatch && nameMatch) {
+            const ext = path.extname(filenameMatch[1]) || ".jpg";
+            files.push({ name: nameMatch[1], filename: filenameMatch[1], ext, data: bodyBuf });
+          }
+
+          pos = nextDelimIdx;
+        }
+
+        resolve(files);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Ensure uploads directory exists
+// ---------------------------------------------------------------------------
+
+function ensureUploadsDir() {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+}
+
+function safeUploadExtension(filename, mediaType) {
+  const fromName = path.extname(String(filename || "")).toLowerCase();
+  if (MIME_TYPES[fromName]) {
+    return fromName;
+  }
+
+  const type = String(mediaType || "").toLowerCase();
+  if (type === "image/png") return ".png";
+  if (type === "image/webp") return ".webp";
+  if (type === "image/gif") return ".gif";
+  if (type === "image/bmp") return ".bmp";
+  return ".jpg";
+}
+
+async function saveUploadBuffer(buffer, ext) {
+  ensureUploadsDir();
+
+  const random = crypto.randomBytes(8).toString("hex");
+  const filename = `${Date.now()}-${random}${ext || ".jpg"}`;
+  const filepath = path.join(UPLOADS_DIR, filename);
+
+  await fs.promises.writeFile(filepath, buffer);
+
+  return `/uploads/${filename}`;
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers
+// ---------------------------------------------------------------------------
+
+async function handleLogin(req, res) {
+  const { code, nickname, avatarUrl } = await readJsonBody(req);
+  if (!code) {
+    return sendError(res, 400, "missing code", "MISSING_CODE");
+  }
+
+  const { openid } = await wxCode2Session(code);
+  let user = await db.findOrCreateUser(openid);
+  if (nickname || avatarUrl) {
+    user = await db.updateUserProfile(openid, { nickname, avatarUrl });
+  }
+
+  const token = generateToken(openid);
+  sendJson(res, 200, { token, user });
+}
+
+async function handleListParkingLots(req, res) {
+  const url = parseUrl(req);
+  const latitude = url.searchParams.get("latitude");
+  const longitude = url.searchParams.get("longitude");
+  const radius = url.searchParams.get("radius") || "3000";
+
+  const opts = {};
+  if (latitude != null && longitude != null) {
+    opts.latitude = parseFloat(latitude);
+    opts.longitude = parseFloat(longitude);
+    opts.radiusMeters = parseInt(radius, 10);
+  }
+
+  const lots = await db.getAllParkingLots(opts);
+  sendJson(res, 200, { data: lots });
+}
+
+async function handleGetParkingLot(req, res, params, openid) {
+  const lot = await db.getParkingLotById(params.id);
+  if (!lot) {
+    return sendError(res, 404, "parking lot not found", "NOT_FOUND");
+  }
+
+  let userVote = null;
+  if (openid) {
+    const vote = await db.getUserVote(openid, params.id);
+    if (vote) userVote = vote.type;
+  }
+
+  sendJson(res, 200, { data: lot, userVote });
+}
+
+async function handleCreateParkingLot(req, res, openid) {
+  const body = await readJsonBody(req);
+  const { name, address, latitude, longitude, entrance_tip, availability,
+    walk_extra_minutes, pricing, evidence_photos } = body;
+
+  if (!name || latitude == null || longitude == null) {
+    return sendError(res, 400, "name, latitude, longitude are required", "MISSING_FIELDS");
+  }
+
+  // Get user profile for owner info
+  const user = await db.findOrCreateUser(openid);
+
+  const lotData = {
+    id: crypto.randomUUID(),
+    name,
+    address: address || "",
+    latitude,
+    longitude,
+    entrance_tip: entrance_tip || "",
+    availability: availability || "unknown",
+    walk_extra_minutes: walk_extra_minutes || 0,
+    pricing: pricing || {},
+    evidence_photos: evidence_photos || [],
+    owner_openid: openid,
+    owner_nickname: user.nickname || "",
+    owner_avatar: user.avatar_url || "",
+    source: "user"
+  };
+
+  const lot = await db.createParkingLot(lotData);
+  sendJson(res, 201, { data: lot });
+}
+
+async function handleUpdateParkingLot(req, res, params, openid) {
+  const body = await readJsonBody(req);
+  const lot = await db.updateParkingLot(params.id, openid, body);
+  if (!lot) {
+    return sendError(res, 404, "parking lot not found", "NOT_FOUND");
+  }
+  sendJson(res, 200, { data: lot });
+}
+
+async function handleVote(req, res, params, openid) {
+  const { type } = await readJsonBody(req);
+  if (!type || (type !== "up" && type !== "down")) {
+    return sendError(res, 400, "type must be 'up' or 'down'", "INVALID_VOTE_TYPE");
+  }
+  const result = await db.voteParkingLot(openid, params.id, type);
+  sendJson(res, 200, { data: result });
+}
+
+async function handleListVehicles(req, res, openid) {
+  const vehicles = await db.getUserVehicles(openid);
+  sendJson(res, 200, { data: vehicles });
+}
+
+async function handleAddVehicle(req, res, openid) {
+  const { plate, type } = await readJsonBody(req);
+  if (!plate) {
+    return sendError(res, 400, "plate is required", "MISSING_PLATE");
+  }
+  const vehicle = await db.addVehicle(openid, plate, type || "fuel");
+  sendJson(res, 201, { data: vehicle });
+}
+
+async function handleDeleteVehicle(req, res, params, openid) {
+  const deleted = await db.deleteVehicle(openid, params.id);
+  if (!deleted) {
+    return sendError(res, 404, "vehicle not found", "NOT_FOUND");
+  }
+  sendJson(res, 200, { success: true });
+}
+
+async function handleUpload(req, res) {
+  const contentType = req.headers["content-type"] || "";
+
+  if (contentType.indexOf("application/json") >= 0) {
+    const { filename, mediaType, base64 } = await readJsonBody(req);
+    if (!base64) {
+      return sendError(res, 400, "missing base64 image", "NO_FILE");
+    }
+
+    const buffer = Buffer.from(base64, "base64");
+    if (!buffer.length) {
+      return sendError(res, 400, "invalid base64 image", "INVALID_FILE");
+    }
+
+    const url = await saveUploadBuffer(buffer, safeUploadExtension(filename, mediaType));
+    sendJson(res, 201, { url });
+    return;
+  }
+
+  const files = await parseMultipart(req);
+  if (!files.length) {
+    return sendError(res, 400, "no file uploaded", "NO_FILE");
+  }
+
+  const file = files[0];
+  const url = await saveUploadBuffer(file.data, safeUploadExtension(file.filename, contentType));
+
+  sendJson(res, 201, { url });
+}
+
+async function handleRecognize(req, res) {
+  const payload = await readJsonBody(req);
+  const useMock = process.env.MODEL_API_MOCK === "1"
+    || (!process.env.SENSENOVA_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN);
+  const recognition = useMock
+    ? buildMockRecognition(payload)
+    : await recognizeWithSenseNovaApi(payload, process.env);
+
+  sendJson(res, 200, {
+    ok: true,
+    mode: useMock ? "mock" : "model",
+    recognition
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Static file serving for uploads
+// ---------------------------------------------------------------------------
+
+const MIME_TYPES = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp"
+};
+
+function serveStaticFile(res, filepath) {
+  const ext = path.extname(filepath).toLowerCase();
+  const contentType = MIME_TYPES[ext] || "application/octet-stream";
+
+  fs.readFile(filepath, (err, data) => {
+    if (err) {
+      sendError(res, 404, "file not found", "NOT_FOUND");
+    } else {
+      res.writeHead(200, {
+        "content-type": contentType,
+        "cache-control": "public, max-age=86400",
+        "access-control-allow-origin": "*"
+      });
+      res.end(data);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main request handler
+// ---------------------------------------------------------------------------
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const { pathname } = parseUrl(req);
+    const method = req.method;
+
+    // CORS preflight
+    if (method === "OPTIONS") {
+      sendJson(res, 204, {});
+      return;
+    }
+
+    // Health check
+    if (method === "GET" && (pathname === "/" || pathname === "/health")) {
+      sendJson(res, 200, {
+        ok: true,
+        service: "mini-parking-api",
+        routes: ["/health", "/api/recognize-parking", "/api/login",
+          "/api/parking-lots", "/api/parking-lots/:id",
+          "/api/parking-lots/:id/vote", "/api/vehicles",
+          "/api/vehicles/:id", "/api/upload"]
+      });
+      return;
+    }
+
+    // Static uploads
+    if (method === "GET" && pathname.startsWith("/uploads/")) {
+      const filename = pathname.slice("/uploads/".length);
+      // Prevent path traversal
+      const safeName = path.basename(filename);
+      serveStaticFile(res, path.join(UPLOADS_DIR, safeName));
+      return;
+    }
+
+    // POST /api/recognize-parking (no auth)
+    if (method === "POST" && pathname === "/api/recognize-parking") {
+      await handleRecognize(req, res);
+      return;
+    }
+
+    // POST /api/login (no auth)
+    if (method === "POST" && pathname === "/api/login") {
+      await handleLogin(req, res);
+      return;
+    }
+
+    // GET /api/parking-lots (no auth)
+    if (method === "GET" && pathname === "/api/parking-lots") {
+      await handleListParkingLots(req, res);
+      return;
+    }
+
+    // --- Routes below require authentication ---
+    let openid = null;
+    if (!isPublicRoute(method, pathname)) {
+      openid = extractOpenid(req);
+      if (!openid) {
+        return sendError(res, 401, "unauthorized: missing or invalid token", "UNAUTHORIZED");
+      }
+    }
+
+    // GET /api/parking-lots/:id (optional auth)
+    let params;
+    params = matchRoute("/api/parking-lots/:id", "GET", method, pathname);
+    if (params) {
+      // Optional auth - extract openid if token present but don't require it
+      const optionalOpenid = extractOpenid(req);
+      await handleGetParkingLot(req, res, params, optionalOpenid);
+      return;
+    }
+
+    // POST /api/parking-lots (auth required)
+    if (method === "POST" && pathname === "/api/parking-lots") {
+      await handleCreateParkingLot(req, res, openid);
+      return;
+    }
+
+    // PUT /api/parking-lots/:id (auth required)
+    params = matchRoute("/api/parking-lots/:id", "PUT", method, pathname);
+    if (params) {
+      await handleUpdateParkingLot(req, res, params, openid);
+      return;
+    }
+
+    // POST /api/parking-lots/:id/vote (auth required)
+    params = matchRoute("/api/parking-lots/:id/vote", "POST", method, pathname);
+    if (params) {
+      await handleVote(req, res, params, openid);
+      return;
+    }
+
+    // GET /api/vehicles (auth required)
+    if (method === "GET" && pathname === "/api/vehicles") {
+      await handleListVehicles(req, res, openid);
+      return;
+    }
+
+    // POST /api/vehicles (auth required)
+    if (method === "POST" && pathname === "/api/vehicles") {
+      await handleAddVehicle(req, res, openid);
+      return;
+    }
+
+    // DELETE /api/vehicles/:id (auth required)
+    params = matchRoute("/api/vehicles/:id", "DELETE", method, pathname);
+    if (params) {
+      await handleDeleteVehicle(req, res, params, openid);
+      return;
+    }
+
+    // POST /api/upload (auth required)
+    if (method === "POST" && pathname === "/api/upload") {
+      await handleUpload(req, res);
+      return;
+    }
+
+    // 404
+    sendError(res, 404, "not found", "NOT_FOUND");
+  } catch (err) {
+    console.error("Request error:", err);
+
+    if (err.message === "request body too large") {
+      return sendError(res, 413, err.message, "BODY_TOO_LARGE");
+    }
+    if (err.message === "invalid json body") {
+      return sendError(res, 400, err.message, "INVALID_JSON");
+    }
+    if (err.message.includes("not authorized")) {
+      return sendError(res, 403, err.message, "FORBIDDEN");
+    }
+    if (err.message.includes("Could not find the table")
+      || err.message.includes("schema cache")) {
+      return sendError(
+        res,
+        503,
+        "database schema is missing; run server/migration.sql in Supabase SQL Editor",
+        "DB_SCHEMA_MISSING"
+      );
+    }
+
+    sendError(res, 500, err.message || "internal server error", "INTERNAL_ERROR");
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`parking api listening on http://${HOST}:${PORT}`);
+});

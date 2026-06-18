@@ -1,0 +1,164 @@
+.vehicles-page {
+  padding-bottom: 56rpx;
+}
+
+.header-panel,
+.login-panel,
+.form-section,
+.list-section {
+  border: 1rpx solid #dce4ec;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.header-panel,
+.login-panel,
+.form-section,
+.list-section {
+  padding: 28rpx;
+}
+
+.login-panel,
+.form-section,
+.list-section {
+  margin-top: 20rpx;
+}
+
+.page-title,
+.page-copy,
+.login-title,
+.login-copy,
+.section-title,
+.current-label,
+.current-value {
+  display: block;
+}
+
+.page-title {
+  color: #111827;
+  font-size: 40rpx;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.page-copy,
+.login-copy {
+  margin-top: 12rpx;
+  color: #657286;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.current-line {
+  margin-top: 24rpx;
+  padding: 20rpx;
+  border-radius: 6rpx;
+  background: #f2f8f6;
+}
+
+.current-label {
+  color: #657286;
+  font-size: 23rpx;
+}
+
+.current-value {
+  margin-top: 8rpx;
+  color: #143d35;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.login-title,
+.section-title {
+  color: #18212f;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.login-button,
+.save-button {
+  width: 100%;
+  margin-top: 24rpx;
+}
+
+.field {
+  margin-top: 20rpx;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 10rpx;
+  color: #435268;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.field-input,
+.picker-value {
+  width: 100%;
+  min-height: 76rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid #d9e2ea;
+  border-radius: 6rpx;
+  background: #f8fafc;
+  color: #18212f;
+  font-size: 28rpx;
+}
+
+.picker-value {
+  display: flex;
+  align-items: center;
+}
+
+.vehicle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border: 1rpx solid #e5ebf0;
+  border-radius: 8rpx;
+  background: #f8fafc;
+}
+
+.vehicle-card.is-current {
+  border-color: #8fcbbb;
+  background: #eff8f5;
+}
+
+.vehicle-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.plate-number,
+.vehicle-meta {
+  display: block;
+}
+
+.plate-number {
+  color: #111827;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.vehicle-meta {
+  margin-top: 8rpx;
+  color: #657286;
+  font-size: 24rpx;
+}
+
+.vehicle-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10rpx;
+  flex: 0 0 132rpx;
+}
+
+.small-button {
+  min-height: 58rpx;
+  padding: 0 12rpx;
+  font-size: 23rpx;
+}
