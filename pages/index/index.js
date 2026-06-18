@@ -1,11 +1,9 @@
 const { buildRecommendationSummary, recommendParkingLots } = require("../../utils/recommendation");
 const {
-  findParkingLot,
-  getAllParkingLots,
-  getCurrentVehicle,
   getLoggedInUser,
   updateCurrentUserProfile,
-  asyncGetAllParkingLots
+  asyncGetAllParkingLots,
+  asyncGetCurrentVehicle
 } = require("../../utils/storage");
 const api = require("../../utils/api");
 const { formatDuration } = require("../../utils/pricing");
@@ -16,9 +14,45 @@ const LOGIN_KEY = "parkingLoginState";
 const CURRENT_USER_KEY = "parkingCurrentUser";
 const DESTINATION_KEY = "parkingDestination";
 const SEARCH_RADIUS_METERS = 3000;
-const MIN_DURATION_MINUTES = 10;
-const MAX_DURATION_MINUTES = 24 * 60;
-const DURATION_STEP_MINUTES = 5;
+const DEFAULT_DURATION_MINUTES = 30;
+const MIN_DURATION_MINUTES = 1;
+const MAX_DURATION_DAYS = 7;
+const MAX_DURATION_MINUTES = (MAX_DURATION_DAYS * 24 * 60) + (23 * 60) + 59;
+
+function buildDurationOptions(maxValue, unit, pad) {
+  return Array.from({ length: maxValue + 1 }, (_, value) => ({
+    value,
+    label: pad ? `${value}`.padStart(2, "0") : `${value}`,
+    unit
+  }));
+}
+
+const durationDayOptions = buildDurationOptions(MAX_DURATION_DAYS, "天", false);
+const durationHourOptions = buildDurationOptions(23, "时", true);
+const durationMinuteOptions = buildDurationOptions(59, "分", true);
+
+function normalizeDurationMinutes(durationMinutes) {
+  const number = Number(durationMinutes);
+  const rawMinutes = Number.isFinite(number) ? Math.round(number) : DEFAULT_DURATION_MINUTES;
+  return Math.min(MAX_DURATION_MINUTES, Math.max(MIN_DURATION_MINUTES, rawMinutes));
+}
+
+function durationMinutesToPickerValue(durationMinutes) {
+  const safeMinutes = normalizeDurationMinutes(durationMinutes);
+  const days = Math.floor(safeMinutes / 1440);
+  const restAfterDays = safeMinutes % 1440;
+  const hours = Math.floor(restAfterDays / 60);
+  const minutes = restAfterDays % 60;
+  return [days, hours, minutes];
+}
+
+function pickerValueToDurationMinutes(value) {
+  const pickerValue = Array.isArray(value) ? value : [];
+  const days = Number(pickerValue[0]) || 0;
+  const hours = Number(pickerValue[1]) || 0;
+  const minutes = Number(pickerValue[2]) || 0;
+  return normalizeDurationMinutes((days * 1440) + (hours * 60) + minutes);
+}
 
 function searchableText(parts) {
   return parts.filter(Boolean).join(" ").toLowerCase();
@@ -30,11 +64,12 @@ Page({
     accountStatusText: "游客模式",
     accountActionText: "登录",
     accountStatusClass: "is-guest",
-    minDurationMinutes: MIN_DURATION_MINUTES,
-    maxDurationMinutes: MAX_DURATION_MINUTES,
-    durationStepMinutes: DURATION_STEP_MINUTES,
-    durationMinutes: 60,
-    durationText: "1小时",
+    durationDayOptions,
+    durationHourOptions,
+    durationMinuteOptions,
+    durationPickerValue: durationMinutesToPickerValue(DEFAULT_DURATION_MINUTES),
+    durationMinutes: DEFAULT_DURATION_MINUTES,
+    durationText: "30分钟",
     hasLocation: false,
     hasDestination: false,
     destination: null,
@@ -44,12 +79,6 @@ Page({
     currentVehicle: null,
     currentVehicleText: "未设置车辆",
     currentVehicleHint: "默认按停车场基础规则计费",
-    quickDurations: [
-      { label: "10分钟", minutes: 10, activeClass: "" },
-      { label: "15分钟", minutes: 15, activeClass: "" },
-      { label: "30分钟", minutes: 30, activeClass: "" },
-      { label: "1小时", minutes: 60, activeClass: "is-active" }
-    ],
     searchKeyword: "",
     destinationMatches: [],
     hasDestinationMatches: false,
@@ -63,26 +92,25 @@ Page({
     recommendations: [],
     hasRecommendations: false,
     summary: "登录后选择目的地，再按预计停车时长推荐 3 公里内更合适的停车场。",
-    emptyText: "先选择目的地。系统会在目的地 3 公里内查找停车场。"
+    emptyText: "先选择目的地。系统会在目的地 3 公里内查找停车场。",
+    loading: false
   },
 
   onLoad(query) {
     this.markerLotIds = {};
+    this._lots = [];
     this.restoreLogin();
     this.restoreDestination();
-    this.refreshVehicle();
-    this.syncDuration(Number(query.duration) || app.globalData.durationMinutes || 60);
-    this.refreshRecommendations();
+    this.refreshVehicle().then(() => this.refreshRecommendations());
+    this.syncDuration(Number(query.duration) || app.globalData.durationMinutes || DEFAULT_DURATION_MINUTES);
   },
 
   onShow() {
-    this.refreshVehicle();
-    this.refreshRecommendations();
+    this.refreshVehicle().then(() => this.refreshRecommendations());
   },
 
   onPullDownRefresh() {
-    this.refreshRecommendations();
-    wx.stopPullDownRefresh();
+    this.refreshRecommendations().then(() => wx.stopPullDownRefresh());
   },
 
   restoreLogin() {
@@ -109,30 +137,20 @@ Page({
     wx.login({
       success: (res) => {
         if (!res.code) {
-          wx.showToast({
-            title: "登录失败",
-            icon: "none"
-          });
+          wx.showToast({ title: "登录失败", icon: "none" });
           return;
         }
-
-        const code = res.code;
-
-        // Try to get user profile for nickname/avatar
-        this.loginWithCode(code);
+        this.loginWithCode(res.code);
       },
       fail: () => {
-        wx.showToast({
-          title: "登录失败",
-          icon: "none"
-        });
+        wx.showToast({ title: "登录失败", icon: "none" });
       }
     });
   },
 
   async loginWithCode(code) {
+    this.setData({ loading: true });
     try {
-      // Get user profile if available
       let userInfo = {};
       if (wx.getUserProfile) {
         try {
@@ -151,24 +169,20 @@ Page({
             updateCurrentUserProfile(profileRes.userInfo);
           }
         } catch (e) {
-          // User cancelled or not supported, continue without profile
+          // User cancelled or not supported
         }
       }
 
-      // Call backend login API
       const loginResult = await api.login(code, userInfo);
-
-      // Store token
       const token = loginResult.token;
       wx.setStorageSync("auth_token", token);
       app.globalData.authToken = token;
 
-      // Update user profile from backend response
       if (loginResult.user) {
         const user = loginResult.user;
         wx.setStorageSync(CURRENT_USER_KEY, {
           id: user.openid || user.id || "",
-          nickname: user.nickname || "本机用户",
+          nickname: user.nickname || "用户",
           avatarUrl: user.avatar_url || user.avatarUrl || "",
           avatarText: (user.nickname || "我").slice(0, 1),
           avatarColor: "#166a5b",
@@ -183,68 +197,54 @@ Page({
         accountActionText: "刷新",
         accountStatusClass: "is-authenticated"
       });
-      wx.showToast({
-        title: "已登录",
-        icon: "success"
-      });
+      wx.showToast({ title: "已登录", icon: "success" });
       this.refreshRecommendations();
     } catch (error) {
-      console.warn("Backend login failed, falling back to local:", error.message);
-      // Fallback: local-only login
-      wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
-      this.setData({
-        isLoggedIn: true,
-        accountStatusText: "已登录",
-        accountActionText: "刷新",
-        accountStatusClass: "is-authenticated"
-      });
-      wx.showToast({
-        title: "已登录（离线模式）",
-        icon: "none"
-      });
+      console.error("Login failed:", error.message);
+      wx.showToast({ title: "登录失败，请检查网络", icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
   },
 
-  tryUpdateUserProfile() {
-    if (!wx.getUserProfile) {
+  async refreshVehicle() {
+    if (!getLoggedInUser()) {
+      app.globalData.currentVehicle = null;
+      this.setData({
+        currentVehicle: null,
+        currentVehicleText: "未设置车辆",
+        currentVehicleHint: "默认按停车场基础规则计费"
+      });
       return;
     }
 
-    wx.getUserProfile({
-      desc: "用于展示停车场数据来源头像",
-      success: (profileRes) => {
-        if (profileRes.userInfo) {
-          updateCurrentUserProfile(profileRes.userInfo);
-          this.refreshRecommendations();
-        }
-      }
-    });
-  },
-
-  refreshVehicle() {
-    const vehicle = getCurrentVehicle();
-    app.globalData.currentVehicle = vehicle;
-    this.setData({
-      currentVehicle: vehicle,
-      currentVehicleText: vehicle ? `${vehicle.plateNumber} · ${vehicle.vehicleTypeLabel}` : "未设置车辆",
-      currentVehicleHint: vehicle ? "推荐已按当前车辆类型计费" : "默认按停车场基础规则计费"
-    });
+    try {
+      const vehicle = await asyncGetCurrentVehicle();
+      app.globalData.currentVehicle = vehicle;
+      this.setData({
+        currentVehicle: vehicle,
+        currentVehicleText: vehicle ? `${vehicle.plateNumber} · ${vehicle.vehicleTypeLabel}` : "未设置车辆",
+        currentVehicleHint: vehicle ? "推荐已按当前车辆类型计费" : "默认按停车场基础规则计费"
+      });
+    } catch (error) {
+      console.error("refreshVehicle error:", error.message);
+      app.globalData.currentVehicle = null;
+      this.setData({
+        currentVehicle: null,
+        currentVehicleText: "车辆加载失败",
+        currentVehicleHint: "请检查线上接口后重试"
+      });
+    }
   },
 
   syncDuration(durationMinutes) {
-    const rawMinutes = Number(durationMinutes) || 60;
-    const boundedMinutes = Math.min(MAX_DURATION_MINUTES, Math.max(MIN_DURATION_MINUTES, rawMinutes));
-    const safeMinutes = Math.round(boundedMinutes / DURATION_STEP_MINUTES) * DURATION_STEP_MINUTES;
-    const quickDurations = this.data.quickDurations.map((item) => ({
-      ...item,
-      activeClass: item.minutes === safeMinutes ? "is-active" : ""
-    }));
+    const safeMinutes = normalizeDurationMinutes(durationMinutes);
 
     app.globalData.durationMinutes = safeMinutes;
     this.setData({
       durationMinutes: safeMinutes,
       durationText: formatDuration(safeMinutes),
-      quickDurations
+      durationPickerValue: durationMinutesToPickerValue(safeMinutes)
     });
   },
 
@@ -253,6 +253,7 @@ Page({
     this.refreshParkingSearchResults();
     if (!destination) {
       this.markerLotIds = {};
+      this._lots = [];
       this.setData({
         hasDestination: false,
         recommendations: [],
@@ -265,12 +266,27 @@ Page({
       return;
     }
 
-    // Try backend API first, fallback to local
+    this.setData({ loading: true });
     let lots;
     try {
       lots = await asyncGetAllParkingLots(destination.latitude, destination.longitude, SEARCH_RADIUS_METERS);
+      this._lots = lots;
     } catch (e) {
-      lots = getAllParkingLots();
+      console.error("refreshRecommendations error:", e.message);
+      this.markerLotIds = {};
+      this._lots = [];
+      this.setData({
+        recommendations: [],
+        hasRecommendations: false,
+        mapMarkers: [],
+        mapPoints: [],
+        summary: "线上接口加载失败，请检查网络或后端服务。",
+        emptyText: "线上接口加载失败，请稍后重试。"
+      });
+      wx.showToast({ title: "加载失败，请检查网络", icon: "none" });
+      return;
+    } finally {
+      this.setData({ loading: false });
     }
 
     const keyword = this.data.searchKeyword.trim().toLowerCase();
@@ -281,9 +297,7 @@ Page({
       destination,
       searchRadiusMeters: SEARCH_RADIUS_METERS,
       vehicleType: this.data.currentVehicle ? this.data.currentVehicle.vehicleType : "",
-      preferences: {
-        walkMinuteValue: 0.8
-      }
+      preferences: { walkMinuteValue: 0.8 }
     });
     const mapState = this.buildMapState(destination, recommendations);
 
@@ -299,50 +313,27 @@ Page({
   },
 
   matchLotKeyword(lot, keyword) {
-    if (!keyword) {
-      return true;
-    }
-
+    if (!keyword) return true;
     const tags = lot.access && Array.isArray(lot.access.tags) ? lot.access.tags.join(" ") : "";
-    return searchableText([
-      lot.name,
-      lot.address,
-      tags,
-      lot.pricing && lot.pricing.notes
-    ]).indexOf(keyword) >= 0;
+    return searchableText([lot.name, lot.address, tags, lot.pricing && lot.pricing.notes]).indexOf(keyword) >= 0;
   },
 
   async refreshParkingSearchResults() {
     const keyword = this.data.searchKeyword.trim().toLowerCase();
     if (!keyword) {
-      this.setData({
-        parkingSearchResults: [],
-        hasParkingSearchResults: false
-      });
+      this.setData({ parkingSearchResults: [], hasParkingSearchResults: false });
       return;
     }
 
     const destination = app.globalData.destination;
-    let lots;
-    try {
-      lots = await asyncGetAllParkingLots(
-        destination ? destination.latitude : undefined,
-        destination ? destination.longitude : undefined,
-        destination ? SEARCH_RADIUS_METERS : undefined
-      );
-    } catch (e) {
-      lots = getAllParkingLots();
-    }
-
+    const lots = this._lots || [];
     const results = recommendParkingLots({
       lots: lots.filter((lot) => this.matchLotKeyword(lot, keyword)),
       durationMinutes: this.data.durationMinutes,
       destination,
       searchRadiusMeters: destination ? SEARCH_RADIUS_METERS : 0,
       vehicleType: this.data.currentVehicle ? this.data.currentVehicle.vehicleType : "",
-      preferences: {
-        walkMinuteValue: 0.8
-      }
+      preferences: { walkMinuteValue: 0.8 }
     }).slice(0, 5);
 
     this.setData({
@@ -358,18 +349,11 @@ Page({
       longitude: Number(destination.longitude),
       title: destination.name || "目的地",
       callout: {
-        content: "目的地",
-        color: "#ffffff",
-        bgColor: "#166a5b",
-        padding: 8,
-        borderRadius: 4,
-        display: "ALWAYS"
+        content: "目的地", color: "#ffffff", bgColor: "#166a5b",
+        padding: 8, borderRadius: 4, display: "ALWAYS"
       }
     }];
-    const points = [{
-      latitude: Number(destination.latitude),
-      longitude: Number(destination.longitude)
-    }];
+    const points = [{ latitude: Number(destination.latitude), longitude: Number(destination.longitude) }];
     const markerLotIds = {};
 
     recommendations.slice(0, 8).forEach((lot, index) => {
@@ -382,17 +366,12 @@ Page({
         title: lot.name,
         callout: {
           content: `${lot.rank}. ${lot.name} ${lot.feeText}`,
-          color: "#18212f",
-          bgColor: "#ffffff",
-          padding: 8,
-          borderRadius: 4,
+          color: "#18212f", bgColor: "#ffffff",
+          padding: 8, borderRadius: 4,
           display: index === 0 ? "ALWAYS" : "BYCLICK"
         }
       });
-      points.push({
-        latitude: Number(lot.location.latitude),
-        longitude: Number(lot.location.longitude)
-      });
+      points.push({ latitude: Number(lot.location.latitude), longitude: Number(lot.location.longitude) });
     });
 
     this.markerLotIds = markerLotIds;
@@ -406,39 +385,28 @@ Page({
   },
 
   onSearchInput(event) {
-    this.setData({
-      searchKeyword: event.detail.value
-    });
+    this.setData({ searchKeyword: event.detail.value });
     this.refreshRecommendations();
   },
 
   clearSearch() {
-    this.setData({
-      searchKeyword: "",
-      parkingSearchResults: [],
-      hasParkingSearchResults: false
-    });
+    this.setData({ searchKeyword: "", parkingSearchResults: [], hasParkingSearchResults: false });
     this.refreshRecommendations();
   },
 
   onDestinationInput(event) {
-    this.setData({
-      destinationKeyword: event.detail.value
-    });
+    this.setData({ destinationKeyword: event.detail.value });
     this.refreshDestinationMatches(event.detail.value);
   },
 
   refreshDestinationMatches(keywordValue) {
     const keyword = String(keywordValue || this.data.destinationKeyword || "").trim().toLowerCase();
     if (!keyword) {
-      this.setData({
-        destinationMatches: [],
-        hasDestinationMatches: false
-      });
-      return [];
+      this.setData({ destinationMatches: [], hasDestinationMatches: false });
+      return;
     }
 
-    const matches = getAllParkingLots()
+    const matches = (this._lots || [])
       .filter((lot) => searchableText([lot.name, lot.address]).indexOf(keyword) >= 0)
       .slice(0, 4)
       .map((lot) => ({
@@ -453,7 +421,6 @@ Page({
       destinationMatches: matches,
       hasDestinationMatches: matches.length > 0
     });
-    return matches;
   },
 
   applyDestination(destination) {
@@ -471,10 +438,7 @@ Page({
   setDestination(destination) {
     app.globalData.destination = destination;
     wx.setStorageSync(DESTINATION_KEY, destination);
-    this.setData({
-      destinationMatches: [],
-      hasDestinationMatches: false
-    });
+    this.setData({ destinationMatches: [], hasDestinationMatches: false });
     this.applyDestination(destination);
     this.refreshRecommendations();
   },
@@ -482,29 +446,19 @@ Page({
   searchDestinationCandidates() {
     const keyword = this.data.destinationKeyword.trim();
     if (!keyword) {
-      wx.showToast({
-        title: "请输入目的地",
-        icon: "none"
-      });
+      wx.showToast({ title: "请输入目的地", icon: "none" });
       return;
     }
-
     const matches = this.refreshDestinationMatches(keyword);
-    if (!matches.length) {
-      wx.showToast({
-        title: "暂无本地匹配",
-        icon: "none"
-      });
+    if (!matches || !this.data.hasDestinationMatches) {
+      wx.showToast({ title: "暂无匹配结果", icon: "none" });
     }
   },
 
   selectDestinationMatch(event) {
     const id = event.currentTarget.dataset.id;
     const match = this.data.destinationMatches.find((item) => item.id === id);
-    if (!match) {
-      return;
-    }
-
+    if (!match) return;
     this.setDestination({
       name: match.name,
       address: match.address,
@@ -525,31 +479,20 @@ Page({
         });
       },
       fail: () => {
-        wx.showToast({
-          title: "未选择地点",
-          icon: "none"
-        });
+        wx.showToast({ title: "未选择地点", icon: "none" });
       }
     };
     const latitude = Number(current.latitude);
     const longitude = Number(current.longitude);
-
     if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
       chooseOptions.latitude = latitude;
       chooseOptions.longitude = longitude;
     }
-
     wx.chooseLocation(chooseOptions);
   },
 
-  onDurationSlide(event) {
-    const minutes = Number(event.detail.value) || MIN_DURATION_MINUTES;
-    this.syncDuration(minutes);
-    this.refreshRecommendations();
-  },
-
-  setQuickDuration(event) {
-    const minutes = Number(event.currentTarget.dataset.minutes) || 60;
+  onDurationPickerChange(event) {
+    const minutes = pickerValueToDurationMinutes(event.detail.value);
     this.syncDuration(minutes);
     this.refreshRecommendations();
   },
@@ -558,41 +501,35 @@ Page({
     wx.getLocation({
       type: "gcj02",
       success: (res) => {
-        app.globalData.userLocation = {
-          latitude: res.latitude,
-          longitude: res.longitude
-        };
+        app.globalData.userLocation = { latitude: res.latitude, longitude: res.longitude };
         this.setDestination({
           name: "当前位置",
           address: "已使用当前位置作为目的地",
           latitude: res.latitude,
           longitude: res.longitude
         });
-        wx.showToast({
-          title: "已设为目的地",
-          icon: "success"
-        });
+        wx.showToast({ title: "已设为目的地", icon: "success" });
       },
       fail: () => {
-        wx.showToast({
-          title: "无法获取定位",
-          icon: "none"
-        });
+        wx.showToast({ title: "无法获取定位", icon: "none" });
       }
     });
   },
 
+  findLoadedLot(id) {
+    return (this._lots || []).find((lot) => lot.id === id)
+      || this.data.recommendations.find((lot) => lot.id === id)
+      || null;
+  },
+
   openNavigation(event) {
-    const lot = findParkingLot(event.currentTarget.dataset.id);
-    openParkingLocation(lot);
+    const lot = this.findLoadedLot(event.currentTarget.dataset.id);
+    if (lot) openParkingLocation(lot);
   },
 
   useLotAsDestination(event) {
-    const lot = findParkingLot(event.currentTarget.dataset.id);
-    if (!lot) {
-      return;
-    }
-
+    const lot = this.findLoadedLot(event.currentTarget.dataset.id);
+    if (!lot) return;
     this.setDestination({
       name: lot.name,
       address: lot.address,
@@ -610,10 +547,7 @@ Page({
 
   onMarkerTap(event) {
     const lotId = this.markerLotIds[event.detail.markerId];
-    if (!lotId) {
-      return;
-    }
-
+    if (!lotId) return;
     wx.navigateTo({
       url: `/pages/detail/detail?id=${lotId}&duration=${this.data.durationMinutes}`
     });
@@ -621,30 +555,18 @@ Page({
 
   goAdd() {
     if (!getLoggedInUser()) {
-      wx.showToast({
-        title: "请先登录再分享",
-        icon: "none"
-      });
+      wx.showToast({ title: "请先登录再分享", icon: "none" });
       return;
     }
-
-    wx.navigateTo({
-      url: "/pages/add/add"
-    });
+    wx.navigateTo({ url: "/pages/add/add" });
   },
 
   goVehicles() {
     if (!getLoggedInUser()) {
-      wx.showToast({
-        title: "请先登录再管理车辆",
-        icon: "none"
-      });
+      wx.showToast({ title: "请先登录再管理车辆", icon: "none" });
       return;
     }
-
-    wx.navigateTo({
-      url: "/pages/vehicles/vehicles"
-    });
+    wx.navigateTo({ url: "/pages/vehicles/vehicles" });
   },
 
   onShareAppMessage() {

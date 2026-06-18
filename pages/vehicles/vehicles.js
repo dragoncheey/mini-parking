@@ -1,10 +1,8 @@
 const {
-  deleteUserVehicle,
-  getCurrentVehicle,
   getLoggedInUser,
-  getUserVehicles,
-  saveUserVehicle,
-  setCurrentVehicle,
+  updateCurrentUserProfile,
+  getCurrentVehicleId,
+  setCurrentVehicleId,
   asyncGetUserVehicles,
   asyncAddVehicle,
   asyncDeleteVehicle
@@ -20,10 +18,7 @@ const vehicleTypeOptions = [
 ];
 
 function buildEmptyForm() {
-  return {
-    plateNumber: "",
-    vehicleType: "fuel"
-  };
+  return { plateNumber: "", vehicleType: "fuel" };
 }
 
 Page({
@@ -36,7 +31,8 @@ Page({
     currentVehicleId: "",
     currentVehicleLabel: "未设置",
     emptyText: "暂无车辆，请先录入车牌。",
-    pageTitle: "车辆管理"
+    pageTitle: "车辆管理",
+    loading: false
   },
 
   onLoad() {
@@ -49,17 +45,27 @@ Page({
 
   async refresh() {
     const loggedIn = Boolean(getLoggedInUser());
-    let vehicles;
+    this.setData({ isLoggedIn: loggedIn, loginRequired: !loggedIn });
+
+    if (!loggedIn) {
+      this.setData({ vehicles: [], currentVehicleId: "", currentVehicleLabel: "未设置", emptyText: "请先登录" });
+      return;
+    }
+
+    this.setData({ loading: true });
+    let vehicles = [];
     try {
       vehicles = await asyncGetUserVehicles();
     } catch (e) {
-      vehicles = getUserVehicles();
+      console.error("refresh vehicles error:", e.message);
+      wx.showToast({ title: "加载车辆失败", icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
-    const currentVehicle = getCurrentVehicle();
 
+    const currentId = getCurrentVehicleId();
+    const currentVehicle = vehicles.find((vehicle) => `${vehicle.id}` === `${currentId}`) || vehicles[0] || null;
     this.setData({
-      isLoggedIn: loggedIn,
-      loginRequired: !loggedIn,
       vehicles,
       currentVehicleId: currentVehicle ? currentVehicle.id : "",
       currentVehicleLabel: currentVehicle
@@ -73,25 +79,19 @@ Page({
     wx.login({
       success: (res) => {
         if (!res.code) {
-          wx.showToast({
-            title: "登录失败",
-            icon: "none"
-          });
+          wx.showToast({ title: "登录失败", icon: "none" });
           return;
         }
-
         this.loginWithCodeAndRefresh(res.code);
       },
       fail: () => {
-        wx.showToast({
-          title: "登录失败",
-          icon: "none"
-        });
+        wx.showToast({ title: "登录失败", icon: "none" });
       }
     });
   },
 
   async loginWithCodeAndRefresh(code) {
+    this.setData({ loading: true });
     try {
       let userInfo = {};
       if (wx.getUserProfile) {
@@ -108,21 +108,21 @@ Page({
               nickname: profileRes.userInfo.nickName,
               avatarUrl: profileRes.userInfo.avatarUrl
             };
+            updateCurrentUserProfile(profileRes.userInfo);
           }
         } catch (e) {
-          // User cancelled or not supported
+          // User cancelled
         }
       }
 
       const loginResult = await api.login(code, userInfo);
-      const token = loginResult.token;
-      wx.setStorageSync("auth_token", token);
+      wx.setStorageSync("auth_token", loginResult.token);
 
       if (loginResult.user) {
         const user = loginResult.user;
         wx.setStorageSync(CURRENT_USER_KEY, {
           id: user.openid || user.id || "",
-          nickname: user.nickname || "本机用户",
+          nickname: user.nickname || "用户",
           avatarUrl: user.avatar_url || user.avatarUrl || "",
           avatarText: (user.nickname || "我").slice(0, 1),
           avatarColor: "#166a5b",
@@ -131,19 +131,19 @@ Page({
       }
 
       wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
+      wx.showToast({ title: "已登录", icon: "success" });
       this.refresh();
     } catch (error) {
-      console.warn("Backend login failed, falling back to local:", error.message);
-      wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
-      this.refresh();
+      console.error("Login failed:", error.message);
+      wx.showToast({ title: "登录失败，请检查网络", icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
   },
 
   onInput(event) {
     const key = event.currentTarget.dataset.key;
-    this.setData({
-      [`form.${key}`]: event.detail.value
-    });
+    this.setData({ [`form.${key}`]: event.detail.value });
   },
 
   onVehicleTypeChange(event) {
@@ -154,10 +154,7 @@ Page({
 
   async addVehicle() {
     if (!getLoggedInUser()) {
-      wx.showToast({
-        title: "请先登录",
-        icon: "none"
-      });
+      wx.showToast({ title: "请先登录", icon: "none" });
       return;
     }
 
@@ -165,44 +162,47 @@ Page({
     const type = this.data.form.vehicleType || "fuel";
 
     if (!plate) {
-      wx.showToast({
-        title: "请输入车牌",
-        icon: "none"
-      });
+      wx.showToast({ title: "请输入车牌", icon: "none" });
       return;
     }
 
+    this.setData({ loading: true });
     try {
       await asyncAddVehicle(plate, type);
-      this.setData({
-        form: buildEmptyForm()
-      });
-      this.refresh();
-      wx.showToast({
-        title: "已添加车辆",
-        icon: "success"
-      });
+      this.setData({ form: buildEmptyForm() });
+      await this.refresh();
+      wx.showToast({ title: "已添加车辆", icon: "success" });
     } catch (error) {
-      wx.showToast({
-        title: error.message === "PLATE_REQUIRED" ? "请输入车牌" : "车牌已存在",
-        icon: "none"
-      });
+      console.error("Add vehicle failed:", error.message);
+      const msg = error.message.includes("PLATE_DUPLICATED")
+        ? "车牌已存在"
+        : error.message.includes("MISSING_PLATE")
+          ? "请输入车牌"
+          : "添加失败，请检查网络";
+      wx.showToast({ title: msg, icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
   },
 
   useVehicle(event) {
     const id = event.currentTarget.dataset.id;
-    setCurrentVehicle(id);
+    setCurrentVehicleId(id);
     this.refresh();
   },
 
   async removeVehicle(event) {
     const id = event.currentTarget.dataset.id;
+    this.setData({ loading: true });
     try {
       await asyncDeleteVehicle(id);
+      await this.refresh();
+      wx.showToast({ title: "已删除", icon: "success" });
     } catch (e) {
-      console.warn("Delete vehicle failed:", e.message);
+      console.error("Delete vehicle failed:", e.message);
+      wx.showToast({ title: "删除失败，请检查网络", icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
-    this.refresh();
   }
 });

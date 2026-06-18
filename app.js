@@ -10,7 +10,7 @@ App({
   globalData: {
     userLocation: null,
     destination: null,
-    durationMinutes: 60,
+    durationMinutes: 30,
     authToken: ""
   }
 });

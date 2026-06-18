@@ -112,28 +112,47 @@
         <text class="section-title">预计停车</text>
         <text class="duration-value">{{durationText}}</text>
       </view>
-      <text class="duration-hint">10分钟起，5分钟一档</text>
-      <slider
-        min="{{minDurationMinutes}}"
-        max="{{maxDurationMinutes}}"
-        step="{{durationStepMinutes}}"
-        value="{{durationMinutes}}"
-        activeColor="#166a5b"
-        backgroundColor="#d9e3ea"
-        block-color="#166a5b"
-        block-size="22"
-        bindchange="onDurationSlide"
-      />
-      <view class="quick-row">
-        <view
-          wx:for="{{quickDurations}}"
-          wx:key="minutes"
-          class="quick-chip {{item.activeClass}}"
-          data-minutes="{{item.minutes}}"
-          bindtap="setQuickDuration"
+      <text class="duration-hint">默认 30 分钟，1 分钟一档</text>
+      <view class="duration-picker-shell">
+        <picker-view
+          class="duration-picker"
+          indicator-class="duration-picker-indicator"
+          indicator-style="height: 72rpx;"
+          mask-class="duration-picker-mask"
+          value="{{durationPickerValue}}"
+          bindchange="onDurationPickerChange"
         >
-          <text class="quick-chip-text">{{item.label}}</text>
-        </view>
+          <picker-view-column>
+            <view
+              wx:for="{{durationDayOptions}}"
+              wx:key="value"
+              class="duration-wheel-item"
+            >
+              <text class="duration-wheel-number">{{item.label}}</text>
+              <text class="duration-wheel-unit">{{item.unit}}</text>
+            </view>
+          </picker-view-column>
+          <picker-view-column>
+            <view
+              wx:for="{{durationHourOptions}}"
+              wx:key="value"
+              class="duration-wheel-item"
+            >
+              <text class="duration-wheel-number">{{item.label}}</text>
+              <text class="duration-wheel-unit">{{item.unit}}</text>
+            </view>
+          </picker-view-column>
+          <picker-view-column>
+            <view
+              wx:for="{{durationMinuteOptions}}"
+              wx:key="value"
+              class="duration-wheel-item"
+            >
+              <text class="duration-wheel-number">{{item.label}}</text>
+              <text class="duration-wheel-unit">{{item.unit}}</text>
+            </view>
+          </picker-view-column>
+        </picker-view>
       </view>
     </view>
   </view>

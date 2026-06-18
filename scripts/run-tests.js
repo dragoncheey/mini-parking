@@ -4,16 +4,21 @@ const { calculateParkingFee, calculateParkingFeeForVehicle } = require("../utils
 const { recommendParkingLots } = require("../utils/recommendation");
 const { buildMockRecognition, normalizeRecognition, parseJsonFromText } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("../server/modelClient");
+const api = require("../utils/api");
 const {
-  findParkingLot,
-  getAllParkingLots,
-  getCurrentVehicle,
-  saveUserParkingLot,
-  saveUserVehicle,
-  setCurrentVehicle,
+  asyncAddVehicle,
+  asyncDeleteVehicle,
+  asyncGetAllParkingLots,
+  asyncGetCurrentVehicle,
+  asyncGetParkingLotDetail,
+  asyncGetUserVehicles,
+  asyncSaveUserParkingLot,
+  asyncUpdateUserParkingLot,
+  asyncVoteParkingLot,
+  getCurrentVehicleId,
+  setCurrentVehicleId,
   updateCurrentUserProfile,
-  updateUserParkingLot,
-  voteParkingLot
+  normalizeVehicles
 } = require("../utils/storage");
 
 function testPricing() {
@@ -97,12 +102,15 @@ function installWxStorageMock() {
     },
     setStorageSync(key, value) {
       store[key] = value;
+    },
+    removeStorageSync(key) {
+      delete store[key];
     }
   };
   return store;
 }
 
-function testUserOwnershipAndVotes() {
+async function testOnlineParkingStorage() {
   const store = installWxStorageMock();
   const owner = {
     id: "owner_1",
@@ -110,67 +118,94 @@ function testUserOwnershipAndVotes() {
     avatarText: "A",
     avatarColor: "#166a5b"
   };
-  const reviewer = {
-    id: "reviewer_1",
-    nickname: "车主 B",
-    avatarText: "B",
-    avatarColor: "#435268"
-  };
-
   store.parkingLoginState = { loggedAt: Date.now() };
   store.parkingCurrentUser = owner;
-  saveUserParkingLot({
-    id: "user_test_lot",
-    name: "用户测试停车场",
-    address: "测试路 2 号",
-    source: "user",
-    ownerId: owner.id,
-    owner,
-    updatedAt: "2026-06-14",
-    confidence: 68,
-    availability: "medium",
-    location: {
+
+  const calls = [];
+  const originalApi = {
+    getParkingLots: api.getParkingLots,
+    getParkingLotDetail: api.getParkingLotDetail,
+    createParkingLot: api.createParkingLot,
+    updateParkingLot: api.updateParkingLot,
+    voteParkingLot: api.voteParkingLot
+  };
+
+  api.getParkingLots = async (latitude, longitude, radius) => {
+    calls.push(["getParkingLots", latitude, longitude, radius]);
+    return [{
+      id: "user_test_lot",
+      name: "用户测试停车场",
+      address: "测试路 2 号",
       latitude: 31.1,
       longitude: 121.1,
-      amap: {}
-    },
-    access: {
-      entrance: "入口",
-      walkingPenaltyMinutes: 0,
-      tags: []
-    },
-    pricing: {
-      freeMinutes: 0,
-      billingUnitMinutes: 60,
-      unitPrice: 5,
-      maxDailyPrice: 0,
-      minCharge: 0,
-      notes: ""
-    },
-    evidence: {
-      photos: []
-    }
-  });
+      owner_openid: owner.id,
+      owner_nickname: owner.nickname,
+      availability: "few",
+      entrance_tip: "入口",
+      pricing: { freeMinutes: 0, billingUnitMinutes: 60, unitPrice: 5 },
+      evidence_photos: ["https://example.com/photo.jpg"],
+      upvotes: 2,
+      downvotes: 1,
+      credibility: 67
+    }];
+  };
+  api.getParkingLotDetail = async (id) => {
+    calls.push(["getParkingLotDetail", id]);
+    return {
+      lot: {
+        id,
+        name: "详情停车场",
+        address: "详情路",
+        latitude: 31.2,
+        longitude: 121.2,
+        owner_openid: "other_user",
+        availability: "plenty",
+        pricing: { freeMinutes: 30, billingUnitMinutes: 60, unitPrice: 6 },
+        upvotes: 1,
+        downvotes: 0,
+        credibility: 63
+      },
+      userVote: "up"
+    };
+  };
+  api.createParkingLot = async (payload) => {
+    calls.push(["createParkingLot", payload.name]);
+    return { id: "created_lot", ...payload };
+  };
+  api.updateParkingLot = async (id, payload) => {
+    calls.push(["updateParkingLot", id, payload.name]);
+    return { id, ...payload };
+  };
+  api.voteParkingLot = async (id, type) => {
+    calls.push(["voteParkingLot", id, type]);
+    return { upvotes: 3, downvotes: 1, credibility: 69 };
+  };
 
-  assert.throws(() => voteParkingLot("user_test_lot", "up"), /OWNER_VOTE_FORBIDDEN/);
-  assert.strictEqual(findParkingLot("user_test_lot").canEdit, true);
+  try {
+    const lots = await asyncGetAllParkingLots(31.1, 121.1, 3000);
+    assert.strictEqual(lots.length, 1);
+    assert.strictEqual(lots[0].canEdit, true);
+    assert.strictEqual(lots[0].availability, "medium");
+    assert.strictEqual(lots[0].location.latitude, 31.1);
+    assert.strictEqual(lots[0].evidence.photos[0].uploadedUrl, "https://example.com/photo.jpg");
+    assert.deepStrictEqual(calls[0], ["getParkingLots", 31.1, 121.1, 3000]);
 
-  store.parkingCurrentUser = reviewer;
-  voteParkingLot("user_test_lot", "up");
-  assert.strictEqual(findParkingLot("user_test_lot").voteStats.up, 1);
-  assert.strictEqual(findParkingLot("user_test_lot").confidence, 72);
-  assert.strictEqual(findParkingLot("user_test_lot").canEdit, false);
+    const detail = await asyncGetParkingLotDetail("detail_lot");
+    assert.strictEqual(detail.lot.name, "详情停车场");
+    assert.strictEqual(detail.lot.canEdit, false);
+    assert.strictEqual(detail.userVote, "up");
 
-  assert.strictEqual(updateUserParkingLot("user_test_lot", { name: "非本人修改" }), false);
-  assert.strictEqual(findParkingLot("user_test_lot").name, "用户测试停车场");
-
-  store.parkingCurrentUser = owner;
-  assert.strictEqual(updateUserParkingLot("user_test_lot", { name: "已维护停车场" }), true);
-  const updated = findParkingLot("user_test_lot");
-  assert.strictEqual(updated.name, "已维护停车场");
-  assert.strictEqual(updated.rawConfidence, 50);
-  assert.strictEqual(updated.voteStats.total, 0);
-  assert.strictEqual(getAllParkingLots().some((lot) => lot.id === "user_test_lot"), true);
+    await asyncSaveUserParkingLot({ name: "新停车场" });
+    await asyncUpdateUserParkingLot("detail_lot", { name: "已更新" });
+    await asyncVoteParkingLot("detail_lot", "down");
+    assert.deepStrictEqual(calls.slice(-3), [
+      ["createParkingLot", "新停车场"],
+      ["updateParkingLot", "detail_lot", "已更新"],
+      ["voteParkingLot", "detail_lot", "down"]
+    ]);
+  } finally {
+    Object.assign(api, originalApi);
+  }
 
   const nextUser = updateCurrentUserProfile({
     nickName: "张三",
@@ -181,7 +216,7 @@ function testUserOwnershipAndVotes() {
   assert.strictEqual(nextUser.avatarUrl, "https://example.com/avatar.png");
 }
 
-function testVehicleStorage() {
+async function testOnlineVehicleStorage() {
   const store = installWxStorageMock();
   store.parkingLoginState = { loggedAt: Date.now() };
   store.parkingCurrentUser = {
@@ -190,19 +225,59 @@ function testVehicleStorage() {
     avatarText: "C"
   };
 
-  const fuel = saveUserVehicle({
-    plateNumber: "苏D12345",
-    vehicleType: "fuel"
-  });
-  const newEnergy = saveUserVehicle({
-    plateNumber: "苏D12345D",
-    vehicleType: "new_energy"
-  });
+  const originalApi = {
+    getVehicles: api.getVehicles,
+    addVehicle: api.addVehicle,
+    deleteVehicle: api.deleteVehicle
+  };
+  const calls = [];
 
-  assert.strictEqual(getCurrentVehicle().id, fuel.id);
-  assert.strictEqual(setCurrentVehicle(newEnergy.id).vehicleType, "new_energy");
-  assert.strictEqual(getCurrentVehicle().plateNumber, "苏D12345D");
-  assert.throws(() => saveUserVehicle({ plateNumber: "苏D12345D", vehicleType: "new_energy" }), /PLATE_DUPLICATED/);
+  api.getVehicles = async () => {
+    calls.push(["getVehicles"]);
+    return [
+      { id: 1, plate: "苏D12345", type: "fuel" },
+      { id: 2, plate: "苏D12345D", type: "new_energy" }
+    ];
+  };
+  api.addVehicle = async (plate, type) => {
+    calls.push(["addVehicle", plate, type]);
+    return { id: 3, plate, type };
+  };
+  api.deleteVehicle = async (id) => {
+    calls.push(["deleteVehicle", id]);
+    return true;
+  };
+
+  try {
+    const vehicles = await asyncGetUserVehicles();
+    assert.strictEqual(vehicles[0].plateNumber, "苏D12345");
+    assert.strictEqual(vehicles[1].vehicleTypeLabel, "新能源小型车");
+    assert.strictEqual(getCurrentVehicleId(), 1);
+
+    setCurrentVehicleId(2);
+    const current = await asyncGetCurrentVehicle();
+    assert.strictEqual(current.plateNumber, "苏D12345D");
+
+    const added = await asyncAddVehicle("苏D99999D", "new_energy");
+    assert.strictEqual(added.vehicleType, "new_energy");
+
+    await asyncDeleteVehicle(2);
+    assert.strictEqual(getCurrentVehicleId(), "");
+    assert.deepStrictEqual(calls, [
+      ["getVehicles"],
+      ["getVehicles"],
+      ["addVehicle", "苏D99999D", "new_energy"],
+      ["deleteVehicle", 2]
+    ]);
+  } finally {
+    Object.assign(api, originalApi);
+  }
+}
+
+function testVehicleNormalization() {
+  const vehicles = normalizeVehicles([{ plate: "苏D1", type: "new_energy" }]);
+  assert.strictEqual(vehicles[0].plateNumber, "苏D1");
+  assert.strictEqual(vehicles[0].vehicleTypeLabel, "新能源小型车");
 }
 
 async function testSenseNovaClient() {
@@ -264,8 +339,9 @@ async function run() {
   testPricing();
   testRecommendation();
   testRecognitionParsing();
-  testUserOwnershipAndVotes();
-  testVehicleStorage();
+  await testOnlineParkingStorage();
+  await testOnlineVehicleStorage();
+  testVehicleNormalization();
   await testSenseNovaClient();
   console.log("all tests passed");
 }

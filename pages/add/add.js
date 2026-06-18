@@ -1,10 +1,7 @@
 const {
-  buildOwnerFromUser,
-  findParkingLot,
   getLoggedInUser,
-  saveUserParkingLot,
   updateCurrentUserProfile,
-  updateUserParkingLot,
+  asyncGetParkingLotDetail,
   asyncSaveUserParkingLot,
   asyncUpdateUserParkingLot
 } = require("../../utils/storage");
@@ -21,13 +18,6 @@ const availabilityOptions = [
   { label: "待确认", value: "unknown" }
 ];
 
-function todayText() {
-  const date = new Date();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
 function numberFromForm(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -43,34 +33,19 @@ function optionalTextValue(value) {
 
 function inferMediaType(path) {
   const value = String(path || "").toLowerCase();
-  if (value.indexOf(".png") >= 0) {
-    return "image/png";
-  }
-  if (value.indexOf(".webp") >= 0) {
-    return "image/webp";
-  }
+  if (value.indexOf(".png") >= 0) return "image/png";
+  if (value.indexOf(".webp") >= 0) return "image/webp";
   return "image/jpeg";
 }
 
 function buildEmptyForm() {
   return {
-    name: "",
-    address: "",
-    entrance: "",
-    latitude: "",
-    longitude: "",
-    amapPoiId: "",
-    freeMinutes: "60",
-    billingUnitMinutes: "60",
-    unitPrice: "5",
-    maxDailyPrice: "",
-    notes: "",
+    name: "", address: "", entrance: "",
+    latitude: "", longitude: "", amapPoiId: "",
+    freeMinutes: "60", billingUnitMinutes: "60", unitPrice: "5", maxDailyPrice: "", notes: "",
     newEnergyEnabled: false,
-    newEnergyFreeMinutes: "120",
-    newEnergyBillingUnitMinutes: "",
-    newEnergyUnitPrice: "",
-    newEnergyMaxDailyPrice: "",
-    newEnergyNotes: "",
+    newEnergyFreeMinutes: "120", newEnergyBillingUnitMinutes: "",
+    newEnergyUnitPrice: "", newEnergyMaxDailyPrice: "", newEnergyNotes: "",
     walkingPenaltyMinutes: "0"
   };
 }
@@ -125,16 +100,17 @@ Page({
     canRecognize: false,
     recognizeDisabled: true,
     recognitionWarnings: [],
-    recognitionWarningText: ""
+    recognitionWarningText: "",
+    loading: false
   },
 
   onLoad(query) {
-    const editId = query && query.id ? query.id : "";
+    const editId = (query && query.id) || "";
     this.pendingEditId = editId;
     this.bootstrap(editId);
   },
 
-  bootstrap(editId) {
+  async bootstrap(editId) {
     const user = getLoggedInUser();
     if (!user) {
       this.setData({
@@ -143,19 +119,16 @@ Page({
         isEditing: Boolean(editId),
         editId: editId || "",
         pageTitle: editId ? "维护停车场" : "录入停车场",
-        introText: "登录后才能上报或维护停车场信息，来源会展示为你的用户头像。",
+        introText: "登录后才能上报或维护停车场信息。",
         saveButtonText: editId ? "保存修改" : "保存并参与推荐"
       });
       return;
     }
 
-    this.setData({
-      isLoggedIn: true,
-      loginRequired: false
-    });
+    this.setData({ isLoggedIn: true, loginRequired: false });
 
     if (editId) {
-      this.loadEditableLot(editId);
+      await this.loadEditableLot(editId);
       return;
     }
 
@@ -183,25 +156,19 @@ Page({
     wx.login({
       success: (res) => {
         if (!res.code) {
-          wx.showToast({
-            title: "登录失败",
-            icon: "none"
-          });
+          wx.showToast({ title: "登录失败", icon: "none" });
           return;
         }
-
         this.loginWithCodeAndContinue(res.code);
       },
       fail: () => {
-        wx.showToast({
-          title: "登录失败",
-          icon: "none"
-        });
+        wx.showToast({ title: "登录失败", icon: "none" });
       }
     });
   },
 
   async loginWithCodeAndContinue(code) {
+    this.setData({ loading: true });
     try {
       let userInfo = {};
       if (wx.getUserProfile) {
@@ -221,19 +188,18 @@ Page({
             updateCurrentUserProfile(profileRes.userInfo);
           }
         } catch (e) {
-          // User cancelled or not supported
+          // User cancelled
         }
       }
 
       const loginResult = await api.login(code, userInfo);
-      const token = loginResult.token;
-      wx.setStorageSync("auth_token", token);
+      wx.setStorageSync("auth_token", loginResult.token);
 
       if (loginResult.user) {
         const user = loginResult.user;
         wx.setStorageSync(CURRENT_USER_KEY, {
           id: user.openid || user.id || "",
-          nickname: user.nickname || "本机用户",
+          nickname: user.nickname || "用户",
           avatarUrl: user.avatar_url || user.avatarUrl || "",
           avatarText: (user.nickname || "我").slice(0, 1),
           avatarColor: "#166a5b",
@@ -242,43 +208,37 @@ Page({
       }
 
       wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
-      wx.showToast({
-        title: "已登录",
-        icon: "success"
-      });
+      wx.showToast({ title: "已登录", icon: "success" });
       this.bootstrap(this.pendingEditId || this.data.editId);
     } catch (error) {
-      console.warn("Backend login failed, falling back to local:", error.message);
-      wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
-      this.bootstrap(this.pendingEditId || this.data.editId);
+      console.error("Login failed:", error.message);
+      wx.showToast({ title: "登录失败，请检查网络", icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
   },
 
-  tryUpdateUserProfile() {
-    if (!wx.getUserProfile) {
+  async loadEditableLot(editId) {
+    this.setData({ loading: true });
+    let lot = null;
+    try {
+      const result = await asyncGetParkingLotDetail(editId);
+      lot = result.lot;
+    } catch (e) {
+      console.error("loadEditableLot error:", e.message);
+    } finally {
+      this.setData({ loading: false });
+    }
+
+    if (!lot) {
+      wx.showToast({ title: "未找到停车场", icon: "none" });
+      setTimeout(() => wx.navigateBack(), 600);
       return;
     }
 
-    wx.getUserProfile({
-      desc: "用于展示停车场数据来源头像",
-      success: (profileRes) => {
-        if (profileRes.userInfo) {
-          updateCurrentUserProfile(profileRes.userInfo);
-        }
-      }
-    });
-  },
-
-  loadEditableLot(editId) {
-    const lot = findParkingLot(editId);
-    if (!lot || !lot.canEdit) {
-      wx.showToast({
-        title: lot ? "只能维护自己上报的信息" : "未找到停车场",
-        icon: "none"
-      });
-      setTimeout(() => {
-        wx.navigateBack();
-      }, 600);
+    if (!lot.canEdit) {
+      wx.showToast({ title: "只能维护自己上报的信息", icon: "none" });
+      setTimeout(() => wx.navigateBack(), 600);
       return;
     }
 
@@ -311,24 +271,17 @@ Page({
 
   onInput(event) {
     const key = event.currentTarget.dataset.key;
-    this.setData({
-      [`form.${key}`]: event.detail.value
-    });
+    this.setData({ [`form.${key}`]: event.detail.value });
   },
 
   onSwitchChange(event) {
     const key = event.currentTarget.dataset.key;
-    this.setData({
-      [`form.${key}`]: Boolean(event.detail.value)
-    });
+    this.setData({ [`form.${key}`]: Boolean(event.detail.value) });
   },
 
   onAvailabilityChange(event) {
     const availabilityIndex = Number(event.detail.value);
-    this.setData({
-      availabilityIndex,
-      availabilityLabel: availabilityOptions[availabilityIndex].label
-    });
+    this.setData({ availabilityIndex, availabilityLabel: availabilityOptions[availabilityIndex].label });
   },
 
   useCurrentLocation() {
@@ -339,16 +292,10 @@ Page({
           "form.latitude": `${res.latitude}`,
           "form.longitude": `${res.longitude}`
         });
-        wx.showToast({
-          title: "已填入坐标",
-          icon: "success"
-        });
+        wx.showToast({ title: "已填入坐标", icon: "success" });
       },
       fail: () => {
-        wx.showToast({
-          title: "无法获取定位",
-          icon: "none"
-        });
+        wx.showToast({ title: "无法获取定位", icon: "none" });
       }
     });
   },
@@ -362,16 +309,10 @@ Page({
           "form.latitude": `${res.latitude}`,
           "form.longitude": `${res.longitude}`
         });
-        wx.showToast({
-          title: "已选择位置",
-          icon: "success"
-        });
+        wx.showToast({ title: "已选择位置", icon: "success" });
       },
       fail: () => {
-        wx.showToast({
-          title: "未选择位置",
-          icon: "none"
-        });
+        wx.showToast({ title: "未选择位置", icon: "none" });
       }
     });
   },
@@ -385,13 +326,7 @@ Page({
       success: async (res) => {
         const newPhotos = [];
         for (const file of res.tempFiles) {
-          const photo = {
-            path: file.tempFilePath,
-            size: file.size || 0,
-            capturedAt: Date.now()
-          };
-
-          // Try to upload the image to backend
+          const photo = { path: file.tempFilePath, size: file.size || 0, capturedAt: Date.now() };
           try {
             const uploadedUrl = await api.uploadImage(file.tempFilePath);
             if (uploadedUrl) {
@@ -399,9 +334,9 @@ Page({
               photo.uploaded = true;
             }
           } catch (e) {
-            console.warn("Image upload failed, keeping temp path:", e.message);
+            console.warn("Image upload failed:", e.message);
+            wx.showToast({ title: "图片上传失败", icon: "none" });
           }
-
           newPhotos.push(photo);
         }
 
@@ -420,10 +355,7 @@ Page({
         }
       },
       fail: () => {
-        wx.showToast({
-          title: "未选择照片",
-          icon: "none"
-        });
+        wx.showToast({ title: "未选择照片", icon: "none" });
       }
     });
   },
@@ -431,10 +363,7 @@ Page({
   previewEvidence(event) {
     const index = Number(event.currentTarget.dataset.index) || 0;
     const urls = this.data.evidencePhotos.map((photo) => photo.path);
-    wx.previewImage({
-      current: urls[index],
-      urls
-    });
+    wx.previewImage({ current: urls[index], urls });
   },
 
   removeEvidence(event) {
@@ -458,12 +387,7 @@ Page({
       wx.getFileSystemManager().readFile({
         filePath,
         encoding: "base64",
-        success: (res) => {
-          resolve({
-            base64: res.data,
-            mediaType: inferMediaType(filePath)
-          });
-        },
+        success: (res) => resolve({ base64: res.data, mediaType: inferMediaType(filePath) }),
         fail: reject
       });
     });
@@ -494,15 +418,9 @@ Page({
       recognitionHint: result.evidenceSummary || "已根据照片和定位回填字段，请保存前复核。"
     };
 
-    if (location.latitude != null) {
-      updates["form.latitude"] = `${location.latitude}`;
-    }
-    if (location.longitude != null) {
-      updates["form.longitude"] = `${location.longitude}`;
-    }
-    if (location.amapPoiId) {
-      updates["form.amapPoiId"] = location.amapPoiId;
-    }
+    if (location.latitude != null) updates["form.latitude"] = `${location.latitude}`;
+    if (location.longitude != null) updates["form.longitude"] = `${location.longitude}`;
+    if (location.amapPoiId) updates["form.amapPoiId"] = location.amapPoiId;
 
     if (result.availability) {
       const index = availabilityOptions.findIndex((item) => item.value === result.availability);
@@ -517,10 +435,7 @@ Page({
 
   async recognizeEvidence() {
     if (!this.data.evidencePhotos.length) {
-      wx.showToast({
-        title: "请先拍照",
-        icon: "none"
-      });
+      wx.showToast({ title: "请先拍照", icon: "none" });
       return;
     }
 
@@ -532,7 +447,9 @@ Page({
     });
 
     try {
-      const photos = await Promise.all(this.data.evidencePhotos.slice(0, 3).map((photo) => this.readPhotoBase64(photo)));
+      const photos = await Promise.all(
+        this.data.evidencePhotos.slice(0, 3).map((photo) => this.readPhotoBase64(photo))
+      );
       const response = await this.requestRecognition({
         photos,
         form: this.data.form,
@@ -540,19 +457,13 @@ Page({
       });
 
       this.applyRecognition(response.recognition);
-      wx.showToast({
-        title: "识别完成",
-        icon: "success"
-      });
+      wx.showToast({ title: "识别完成", icon: "success" });
     } catch (error) {
       this.setData({
         recognitionStatus: "识别失败，待人工复核",
-        recognitionHint: error.message || "识别接口不可用，请检查本地 API 或网络配置。"
+        recognitionHint: error.message || "识别接口不可用，请检查网络配置。"
       });
-      wx.showToast({
-        title: "识别失败",
-        icon: "none"
-      });
+      wx.showToast({ title: "识别失败", icon: "none" });
     } finally {
       this.setData({
         isRecognizing: false,
@@ -562,97 +473,17 @@ Page({
   },
 
   validate(form) {
-    if (!form.name.trim()) {
-      return "请填写停车场名称";
-    }
-    if (!form.address.trim()) {
-      return "请填写地址";
-    }
+    if (!form.name.trim()) return "请填写停车场名称";
+    if (!form.address.trim()) return "请填写地址";
     if (!Number.isFinite(Number(form.latitude)) || !Number.isFinite(Number(form.longitude))) {
       return "请填写有效坐标";
     }
-    if (numberFromForm(form.billingUnitMinutes, 0) <= 0) {
-      return "计费单位必须大于 0";
-    }
-    if (numberFromForm(form.unitPrice, -1) < 0) {
-      return "价格不能为负数";
-    }
+    if (numberFromForm(form.billingUnitMinutes, 0) <= 0) return "计费单位必须大于 0";
+    if (numberFromForm(form.unitPrice, -1) < 0) return "价格不能为负数";
     return "";
   },
 
-  buildLotPayload(user) {
-    const form = this.data.form;
-    const maxDailyPrice = numberFromForm(form.maxDailyPrice, 0);
-    const availability = availabilityOptions[this.data.availabilityIndex].value;
-    const basePricing = {
-      freeMinutes: numberFromForm(form.freeMinutes, 0),
-      billingUnitMinutes: numberFromForm(form.billingUnitMinutes, 60),
-      unitPrice: numberFromForm(form.unitPrice, 0),
-      maxDailyPrice,
-      minCharge: 0,
-      notes: form.notes.trim()
-    };
-
-    if (form.newEnergyEnabled) {
-      const newEnergyFreeMinutes = numberFromForm(form.newEnergyFreeMinutes, 120);
-      basePricing.pricingByVehicle = {
-        new_energy: {
-          freeMinutes: newEnergyFreeMinutes,
-          notes: form.newEnergyNotes.trim() || `新能源${newEnergyFreeMinutes}分钟免费，之后按默认规则计费`
-        }
-      };
-
-      if (form.newEnergyBillingUnitMinutes.trim()) {
-        basePricing.pricingByVehicle.new_energy.billingUnitMinutes = numberFromForm(form.newEnergyBillingUnitMinutes, basePricing.billingUnitMinutes);
-      }
-      if (form.newEnergyUnitPrice.trim()) {
-        basePricing.pricingByVehicle.new_energy.unitPrice = numberFromForm(form.newEnergyUnitPrice, basePricing.unitPrice);
-      }
-      if (form.newEnergyMaxDailyPrice.trim()) {
-        basePricing.pricingByVehicle.new_energy.maxDailyPrice = numberFromForm(form.newEnergyMaxDailyPrice, basePricing.maxDailyPrice);
-      }
-    }
-
-    return {
-      name: form.name.trim(),
-      address: form.address.trim(),
-      source: "user",
-      updatedAt: todayText(),
-      ownerId: user.id,
-      owner: buildOwnerFromUser(user),
-      availability,
-      distanceHintMeters: 500,
-      location: {
-        latitude: numberFromForm(form.latitude, 0),
-        longitude: numberFromForm(form.longitude, 0),
-        amap: {
-          poiId: form.amapPoiId.trim(),
-          name: form.name.trim()
-        }
-      },
-      access: {
-        entrance: form.entrance.trim() || "入口待补充",
-        walkingPenaltyMinutes: numberFromForm(form.walkingPenaltyMinutes, 0),
-        tags: []
-      },
-      pricing: basePricing,
-      evidence: {
-        photos: this.data.evidencePhotos,
-        recognitionStatus: this.data.recognitionStatus,
-        recognitionWarnings: this.data.recognitionWarnings,
-        capturedLocation: {
-          latitude: numberFromForm(form.latitude, 0),
-          longitude: numberFromForm(form.longitude, 0)
-        },
-        capturedAt: Date.now()
-      }
-    };
-  },
-
-  /**
-   * Build the payload for the backend API (field names match server expectations)
-   */
-  buildApiPayload(user) {
+  buildApiPayload() {
     const form = this.data.form;
     const availability = availabilityOptions[this.data.availabilityIndex].value;
     const basePricing = {
@@ -672,15 +503,17 @@ Page({
           notes: form.newEnergyNotes.trim() || `新能源${newEnergyFreeMinutes}分钟免费，之后按默认规则计费`
         }
       };
-
       if (form.newEnergyBillingUnitMinutes.trim()) {
-        basePricing.pricingByVehicle.new_energy.billingUnitMinutes = numberFromForm(form.newEnergyBillingUnitMinutes, basePricing.billingUnitMinutes);
+        basePricing.pricingByVehicle.new_energy.billingUnitMinutes =
+          numberFromForm(form.newEnergyBillingUnitMinutes, basePricing.billingUnitMinutes);
       }
       if (form.newEnergyUnitPrice.trim()) {
-        basePricing.pricingByVehicle.new_energy.unitPrice = numberFromForm(form.newEnergyUnitPrice, basePricing.unitPrice);
+        basePricing.pricingByVehicle.new_energy.unitPrice =
+          numberFromForm(form.newEnergyUnitPrice, basePricing.unitPrice);
       }
       if (form.newEnergyMaxDailyPrice.trim()) {
-        basePricing.pricingByVehicle.new_energy.maxDailyPrice = numberFromForm(form.newEnergyMaxDailyPrice, basePricing.maxDailyPrice);
+        basePricing.pricingByVehicle.new_energy.maxDailyPrice =
+          numberFromForm(form.newEnergyMaxDailyPrice, basePricing.maxDailyPrice);
       }
     }
 
@@ -702,75 +535,35 @@ Page({
   async save() {
     const user = getLoggedInUser();
     if (!user) {
-      this.setData({
-        isLoggedIn: false,
-        loginRequired: true
-      });
-      wx.showToast({
-        title: "请先登录",
-        icon: "none"
-      });
+      this.setData({ isLoggedIn: false, loginRequired: true });
+      wx.showToast({ title: "请先登录", icon: "none" });
       return;
     }
 
     const form = this.data.form;
     const error = this.validate(form);
     if (error) {
-      wx.showToast({
-        title: error,
-        icon: "none"
-      });
+      wx.showToast({ title: error, icon: "none" });
       return;
     }
 
-    const payload = this.buildLotPayload(user);
-    const apiPayload = this.buildApiPayload(user);
+    const apiPayload = this.buildApiPayload();
+    this.setData({ loading: true });
 
-    if (this.data.isEditing) {
-      // Try backend first
-      try {
-        const updatedLot = await api.updateParkingLot(this.data.editId, apiPayload);
-        updateUserParkingLot(this.data.editId, updatedLot || payload);
-        wx.showToast({
-          title: "已保存修改",
-          icon: "success"
-        });
-      } catch (e) {
-        console.warn("Update via API failed, falling back to local:", e.message);
-        updateUserParkingLot(this.data.editId, payload);
-        wx.showToast({
-          title: "已保存修改（离线）",
-          icon: "none"
-        });
+    try {
+      if (this.data.isEditing) {
+        await asyncUpdateUserParkingLot(this.data.editId, apiPayload);
+        wx.showToast({ title: "已保存修改", icon: "success" });
+      } else {
+        await asyncSaveUserParkingLot(apiPayload);
+        wx.showToast({ title: "已保存", icon: "success" });
       }
-    } else {
-      const newLot = {
-        ...payload,
-        id: `user_${Date.now()}`,
-        confidence: this.data.evidencePhotos.length ? 68 : 58
-      };
-
-      // Try backend first
-      try {
-        const savedLot = await api.createParkingLot(apiPayload);
-        // Also save locally for cache
-        saveUserParkingLot(savedLot || newLot);
-        wx.showToast({
-          title: "已保存",
-          icon: "success"
-        });
-      } catch (e) {
-        console.warn("Create via API failed, falling back to local:", e.message);
-        saveUserParkingLot(newLot);
-        wx.showToast({
-          title: "已保存（离线）",
-          icon: "none"
-        });
-      }
+      setTimeout(() => wx.navigateBack(), 500);
+    } catch (e) {
+      console.error("Save failed:", e.message);
+      wx.showToast({ title: "保存失败，请检查网络后重试", icon: "none" });
+    } finally {
+      this.setData({ loading: false });
     }
-
-    setTimeout(() => {
-      wx.navigateBack();
-    }, 500);
   }
 });

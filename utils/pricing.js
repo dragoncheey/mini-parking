@@ -111,18 +111,25 @@ function formatMoney(value) {
 
 function formatDuration(minutes) {
   const safeMinutes = Math.max(0, normalizeNumber(minutes, 0));
-  const hours = Math.floor(safeMinutes / 60);
-  const restMinutes = safeMinutes % 60;
+  const days = Math.floor(safeMinutes / 1440);
+  const restAfterDays = safeMinutes % 1440;
+  const hours = Math.floor(restAfterDays / 60);
+  const restMinutes = restAfterDays % 60;
+  const parts = [];
 
-  if (hours > 0 && restMinutes > 0) {
-    return `${hours}小时${restMinutes}分钟`;
+  if (days > 0) {
+    parts.push(`${days}天`);
   }
 
   if (hours > 0) {
-    return `${hours}小时`;
+    parts.push(`${hours}小时`);
   }
 
-  return `${restMinutes}分钟`;
+  if (restMinutes > 0 || parts.length === 0) {
+    parts.push(`${restMinutes}分钟`);
+  }
+
+  return parts.join("");
 }
 
 function describePricing(pricing) {
