@@ -5,8 +5,8 @@ const apiConfig = {
 };
 
 const cloudbaseConfig = {
-  enabled: false,
-  envId: "",
+  enabled: true,
+  envId: "prod-d0g1zp7w0322a5d42",
   serviceName: "mini-parking-api",
   recognitionPath: "/api/recognize-parking"
 };
