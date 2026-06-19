@@ -9,6 +9,7 @@ const { cloudbaseConfig } = require("../config/api");
 const api = require("../utils/api");
 const {
   asyncAddVehicle,
+  asyncUpdateVehicle,
   asyncDeleteVehicle,
   asyncGetAllParkingLots,
   asyncGetCurrentVehicle,
@@ -252,6 +253,7 @@ async function testOnlineVehicleStorage() {
   const originalApi = {
     getVehicles: api.getVehicles,
     addVehicle: api.addVehicle,
+    updateVehicle: api.updateVehicle,
     deleteVehicle: api.deleteVehicle
   };
   const calls = [];
@@ -266,6 +268,10 @@ async function testOnlineVehicleStorage() {
   api.addVehicle = async (plate, type) => {
     calls.push(["addVehicle", plate, type]);
     return { id: 3, plate, type };
+  };
+  api.updateVehicle = async (id, plate, type) => {
+    calls.push(["updateVehicle", id, plate, type]);
+    return { id, plate, type };
   };
   api.deleteVehicle = async (id) => {
     calls.push(["deleteVehicle", id]);
@@ -285,12 +291,16 @@ async function testOnlineVehicleStorage() {
     const added = await asyncAddVehicle("苏D99999D", "new_energy");
     assert.strictEqual(added.vehicleType, "new_energy");
 
+    const updated = await asyncUpdateVehicle(2, "苏D88888D", "new_energy");
+    assert.strictEqual(updated.plateNumber, "苏D88888D");
+
     await asyncDeleteVehicle(2);
     assert.strictEqual(getCurrentVehicleId(), "");
     assert.deepStrictEqual(calls, [
       ["getVehicles"],
       ["getVehicles"],
       ["addVehicle", "苏D99999D", "new_energy"],
+      ["updateVehicle", 2, "苏D88888D", "new_energy"],
       ["deleteVehicle", 2]
     ]);
   } finally {

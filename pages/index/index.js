@@ -19,6 +19,42 @@ const DEFAULT_DURATION_MINUTES = 30;
 const MIN_DURATION_MINUTES = 1;
 const MAX_DURATION_DAYS = 7;
 const MAX_DURATION_MINUTES = (MAX_DURATION_DAYS * 24 * 60) + (23 * 60) + 59;
+const SHEET_COLLAPSED_HEIGHT = 328;
+const SHEET_MAP_GAP = 96;
+const SHEET_ANIMATION_MS = 220;
+const SHEET_DRAG_THRESHOLD = 56;
+
+const recommendationModes = [
+  { value: "distance", label: "距离最近" },
+  { value: "availability", label: "余位最多" },
+  { value: "price", label: "均价最低" }
+];
+
+const parkingScopeOptions = [
+  { value: "all", label: "全部" },
+  { value: "street", label: "路内" },
+  { value: "offstreet", label: "路外" }
+];
+
+const PARKING_SCOPE_TEXT = {
+  all: "全部",
+  street: "路内",
+  offstreet: "路外"
+};
+
+const AVAILABILITY_PRIORITY = {
+  high: 0,
+  medium: 1,
+  unknown: 2,
+  low: 3
+};
+
+const AVAILABILITY_TEXT = {
+  high: "余位较多",
+  medium: "余位一般",
+  low: "车位紧张",
+  unknown: "余位待确认"
+};
 
 function buildDurationOptions(maxValue, unit, pad) {
   return Array.from({ length: maxValue + 1 }, (_, value) => ({
@@ -59,23 +95,96 @@ function searchableText(parts) {
   return parts.filter(Boolean).join(" ").toLowerCase();
 }
 
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function detectParkingType(lot) {
+  const tags = lot && lot.access && Array.isArray(lot.access.tags)
+    ? lot.access.tags.join(" ")
+    : "";
+  const text = searchableText([lot && lot.name, lot && lot.address, tags, lot && lot.access && lot.access.entrance]);
+
+  if (text.indexOf("路侧") >= 0 || text.indexOf("路内") >= 0 || text.indexOf("路边") >= 0 || text.indexOf("公共停车点") >= 0) {
+    return "street";
+  }
+  if (text.indexOf("室内") >= 0 || text.indexOf("地下") >= 0 || text.indexOf("停车楼") >= 0 || text.indexOf("停车场") >= 0) {
+    return "offstreet";
+  }
+  return "unknown";
+}
+
+function decorateRecommendation(lot) {
+  const parkingType = detectParkingType(lot);
+  return {
+    ...lot,
+    parkingType,
+    parkingTypeText: parkingType === "street" ? "路内" : "路外",
+    parkingTypeClass: parkingType === "street" ? "is-street" : "is-offstreet",
+    availabilityText: AVAILABILITY_TEXT[lot.availability || "unknown"] || AVAILABILITY_TEXT.unknown
+  };
+}
+
+function filterLotsByScope(lots, scope) {
+  if (scope === "all") return lots;
+  return lots.filter((lot) => detectParkingType(lot) === scope);
+}
+
+function sortRecommendations(recommendations, mode) {
+  const sorted = recommendations.slice().sort((a, b) => {
+    if (mode === "price") {
+      return a.fee - b.fee
+        || a.distanceMeters - b.distanceMeters
+        || AVAILABILITY_PRIORITY[a.availability || "unknown"] - AVAILABILITY_PRIORITY[b.availability || "unknown"];
+    }
+    if (mode === "availability") {
+      return AVAILABILITY_PRIORITY[a.availability || "unknown"] - AVAILABILITY_PRIORITY[b.availability || "unknown"]
+        || a.distanceMeters - b.distanceMeters
+        || a.fee - b.fee;
+    }
+    return a.distanceMeters - b.distanceMeters
+      || a.fee - b.fee
+      || AVAILABILITY_PRIORITY[a.availability || "unknown"] - AVAILABILITY_PRIORITY[b.availability || "unknown"];
+  });
+
+  return sorted.map((item, index) => ({
+    ...decorateRecommendation(item),
+    rank: index + 1,
+    isBest: index === 0,
+    bestClass: index === 0 ? "is-best" : ""
+  }));
+}
+
 Page({
   data: {
     isLoggedIn: false,
     accountStatusText: "游客模式",
     accountActionText: "登录",
     accountStatusClass: "is-guest",
+    recommendationModes,
+    recommendationMode: "distance",
+    parkingScopeOptions,
+    parkingScope: "all",
+    parkingScopeText: PARKING_SCOPE_TEXT.all,
+    sheetExpanded: false,
+    sheetAnimating: false,
+    sheetHeightPx: SHEET_COLLAPSED_HEIGHT,
+    sheetTranslateY: 0,
+    mapLocateBottomPx: SHEET_COLLAPSED_HEIGHT + 24,
     durationDayOptions,
     durationHourOptions,
     durationMinuteOptions,
     durationPickerValue: durationMinutesToPickerValue(DEFAULT_DURATION_MINUTES),
     durationMinutes: DEFAULT_DURATION_MINUTES,
     durationText: "30分钟",
+    locating: false,
+    locationStatusText: "等待定位",
+    showDurationPicker: false,
     hasLocation: false,
     hasDestination: false,
     destination: null,
-    destinationName: "选择目的地",
-    destinationAddress: "目的地 3 公里内推荐停车场",
+    destinationName: "正在定位",
+    destinationAddress: "定位成功后自动推荐附近停车场",
     destinationKeyword: "",
     currentVehicle: null,
     currentVehicleText: "未设置车辆",
@@ -92,26 +201,130 @@ Page({
     mapPoints: [],
     recommendations: [],
     hasRecommendations: false,
-    summary: "登录后选择目的地，再按预计停车时长推荐 3 公里内更合适的停车场。",
-    emptyText: "先选择目的地。系统会在目的地 3 公里内查找停车场。",
+    summary: "正在定位当前位置。",
+    emptyText: "定位成功后会自动推荐附近停车场。",
     loading: false
   },
 
   onLoad(query) {
     this.markerLotIds = {};
     this._lots = [];
+    this._bootstrapping = true;
+    this.initSheetMetrics();
     this.restoreLogin();
-    this.restoreDestination();
-    this.refreshVehicle().then(() => this.refreshRecommendations());
     this.syncDuration(Number(query.duration) || app.globalData.durationMinutes || DEFAULT_DURATION_MINUTES);
+    this.refreshVehicle()
+      .then(() => this.locateCurrentDestination({ showToast: false }))
+      .finally(() => {
+        this._bootstrapping = false;
+      });
   },
 
   onShow() {
+    this.initSheetMetrics();
+    if (this._bootstrapping) return;
     this.refreshVehicle().then(() => this.refreshRecommendations());
   },
 
   onPullDownRefresh() {
     this.refreshRecommendations().then(() => wx.stopPullDownRefresh());
+  },
+
+  initSheetMetrics() {
+    let windowHeight = 720;
+    try {
+      const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+      windowHeight = info.windowHeight || windowHeight;
+    } catch (error) {
+      windowHeight = 720;
+    }
+
+    const expandedHeight = Math.max(SHEET_COLLAPSED_HEIGHT, windowHeight - SHEET_MAP_GAP);
+    this._sheetCollapsedHeight = SHEET_COLLAPSED_HEIGHT;
+    this._sheetExpandedHeight = expandedHeight;
+    this.setData({
+      sheetHeightPx: this.data.sheetExpanded ? expandedHeight : SHEET_COLLAPSED_HEIGHT,
+      sheetTranslateY: 0,
+      mapLocateBottomPx: (this.data.sheetExpanded ? expandedHeight : SHEET_COLLAPSED_HEIGHT) + 24
+    });
+  },
+
+  setSheetExpanded(expanded) {
+    const sheetHeight = expanded ? this._sheetExpandedHeight : this._sheetCollapsedHeight;
+    this.setData({
+      sheetExpanded: expanded,
+      sheetAnimating: true,
+      sheetHeightPx: sheetHeight,
+      sheetTranslateY: 0,
+      mapLocateBottomPx: sheetHeight + 24
+    });
+    if (this._sheetAnimationTimer) {
+      clearTimeout(this._sheetAnimationTimer);
+    }
+    this._sheetAnimationTimer = setTimeout(() => {
+      this.setData({ sheetAnimating: false });
+      this._sheetAnimationTimer = null;
+    }, SHEET_ANIMATION_MS);
+  },
+
+  toggleSheet() {
+    if (this._ignoreNextSheetTap) {
+      this._ignoreNextSheetTap = false;
+      return;
+    }
+    this.setSheetExpanded(!this.data.sheetExpanded);
+  },
+
+  expandSheetFromSearch() {
+    if (!this.data.sheetExpanded) {
+      this.setSheetExpanded(true);
+    }
+  },
+
+  onSheetTouchStart(event) {
+    const touch = event.touches && event.touches[0];
+    if (!touch) return;
+    this._sheetDragStartY = touch.clientY;
+    this._sheetDragStartHeight = this.data.sheetHeightPx;
+    this._sheetDragStartExpanded = this.data.sheetExpanded;
+    this.setData({ sheetAnimating: false });
+  },
+
+  onSheetTouchMove(event) {
+    if (this._sheetDragStartY == null) return;
+    const touch = event.touches && event.touches[0];
+    if (!touch) return;
+    const deltaY = touch.clientY - this._sheetDragStartY;
+    const nextHeight = clampNumber(
+      this._sheetDragStartHeight - deltaY,
+      this._sheetCollapsedHeight,
+      this._sheetExpandedHeight
+    );
+    this.setData({
+      sheetHeightPx: nextHeight,
+      sheetTranslateY: 0,
+      mapLocateBottomPx: nextHeight + 24
+    });
+  },
+
+  onSheetTouchEnd() {
+    if (this._sheetDragStartY == null) return;
+    const draggedHeight = this.data.sheetHeightPx;
+    const midpoint = (this._sheetExpandedHeight + this._sheetCollapsedHeight) / 2;
+    const didDrag = Math.abs(draggedHeight - this._sheetDragStartHeight) > 4;
+    const shouldExpand = this._sheetDragStartExpanded
+      ? draggedHeight > this._sheetExpandedHeight - SHEET_DRAG_THRESHOLD
+      : draggedHeight > midpoint || draggedHeight > this._sheetCollapsedHeight + SHEET_DRAG_THRESHOLD;
+    this._sheetDragStartY = null;
+    this._sheetDragStartHeight = null;
+    this._ignoreNextSheetTap = didDrag;
+    this.setSheetExpanded(shouldExpand);
+  },
+
+  onSheetTouchCancel() {
+    this._sheetDragStartY = null;
+    this._sheetDragStartHeight = null;
+    this.setSheetExpanded(this.data.sheetExpanded);
   },
 
   restoreLogin() {
@@ -261,8 +474,8 @@ Page({
         hasRecommendations: false,
         mapMarkers: [],
         mapPoints: [],
-        summary: "登录后选择目的地，再按预计停车时长推荐 3 公里内更合适的停车场。",
-        emptyText: "先选择目的地。系统会在目的地 3 公里内查找停车场。"
+        summary: this.data.locating ? "正在定位当前位置。" : "请选择目的地后查看附近停车推荐。",
+        emptyText: this.data.locating ? "定位成功后会自动推荐附近停车场。" : "请选择目的地。系统会在目的地 3 公里内查找停车场。"
       });
       return;
     }
@@ -291,8 +504,11 @@ Page({
     }
 
     const keyword = this.data.searchKeyword.trim().toLowerCase();
-    const filteredLots = lots.filter((lot) => this.matchLotKeyword(lot, keyword));
-    const recommendations = recommendParkingLots({
+    const filteredLots = filterLotsByScope(
+      lots.filter((lot) => this.matchLotKeyword(lot, keyword)),
+      this.data.parkingScope
+    );
+    const baseRecommendations = recommendParkingLots({
       lots: filteredLots,
       durationMinutes: this.data.durationMinutes,
       destination,
@@ -300,6 +516,7 @@ Page({
       vehicleType: this.data.currentVehicle ? this.data.currentVehicle.vehicleType : "",
       preferences: { walkMinuteValue: 0.8 }
     });
+    const recommendations = sortRecommendations(baseRecommendations, this.data.recommendationMode);
     const mapState = this.buildMapState(destination, recommendations);
 
     this.setData({
@@ -327,7 +544,7 @@ Page({
     }
 
     const destination = app.globalData.destination;
-    const lots = this._lots || [];
+    const lots = filterLotsByScope(this._lots || [], this.data.parkingScope);
     const results = recommendParkingLots({
       lots: lots.filter((lot) => this.matchLotKeyword(lot, keyword)),
       durationMinutes: this.data.durationMinutes,
@@ -335,11 +552,12 @@ Page({
       searchRadiusMeters: destination ? SEARCH_RADIUS_METERS : 0,
       vehicleType: this.data.currentVehicle ? this.data.currentVehicle.vehicleType : "",
       preferences: { walkMinuteValue: 0.8 }
-    }).slice(0, 5);
+    });
+    const sortedResults = sortRecommendations(results, this.data.recommendationMode).slice(0, 5);
 
     this.setData({
-      parkingSearchResults: results,
-      hasParkingSearchResults: results.length > 0
+      parkingSearchResults: sortedResults,
+      hasParkingSearchResults: sortedResults.length > 0
     });
   },
 
@@ -386,12 +604,32 @@ Page({
   },
 
   onSearchInput(event) {
+    if (!this.data.sheetExpanded) {
+      this.setSheetExpanded(true);
+    }
     this.setData({ searchKeyword: event.detail.value });
     this.refreshRecommendations();
   },
 
   clearSearch() {
     this.setData({ searchKeyword: "", parkingSearchResults: [], hasParkingSearchResults: false });
+    this.refreshRecommendations();
+  },
+
+  setRecommendationMode(event) {
+    const mode = event.currentTarget.dataset.mode;
+    if (!mode || mode === this.data.recommendationMode) return;
+    this.setData({ recommendationMode: mode });
+    this.refreshRecommendations();
+  },
+
+  setParkingScope(event) {
+    const scope = event.currentTarget.dataset.scope || "all";
+    if (scope === this.data.parkingScope) return;
+    this.setData({
+      parkingScope: scope,
+      parkingScopeText: PARKING_SCOPE_TEXT[scope] || PARKING_SCOPE_TEXT.all
+    });
     this.refreshRecommendations();
   },
 
@@ -422,6 +660,7 @@ Page({
       destinationMatches: matches,
       hasDestinationMatches: matches.length > 0
     });
+    return matches;
   },
 
   applyDestination(destination) {
@@ -436,12 +675,90 @@ Page({
     });
   },
 
-  setDestination(destination) {
+  setDestination(destination, options) {
+    const setOptions = options || {};
+    if (setOptions.source !== "location") {
+      this._manualDestinationAt = Date.now();
+    }
     app.globalData.destination = destination;
-    wx.setStorageSync(DESTINATION_KEY, destination);
-    this.setData({ destinationMatches: [], hasDestinationMatches: false });
+    if (setOptions.persist !== false) {
+      wx.setStorageSync(DESTINATION_KEY, destination);
+    }
+    this.setData({
+      destinationMatches: [],
+      hasDestinationMatches: false,
+      locationStatusText: setOptions.source === "location" ? "已定位" : "自定义目的地"
+    });
     this.applyDestination(destination);
-    this.refreshRecommendations();
+    return this.refreshRecommendations();
+  },
+
+  async locateCurrentDestination(options) {
+    const locateOptions = options || {};
+    const startedAt = Date.now();
+    const previousDestination = app.globalData.destination;
+    this.setData({
+      locating: true,
+      locationStatusText: "定位中",
+      emptyText: "定位成功后会自动推荐附近停车场。"
+    });
+
+    try {
+      const res = await new Promise((resolve, reject) => {
+        wx.getLocation({
+          type: "gcj02",
+          success: resolve,
+          fail: reject
+        });
+      });
+      const destination = {
+        name: "当前位置",
+        address: "已按当前位置推荐附近停车场",
+        latitude: res.latitude,
+        longitude: res.longitude
+      };
+      app.globalData.userLocation = { latitude: res.latitude, longitude: res.longitude };
+      if (!locateOptions.force && this._manualDestinationAt && this._manualDestinationAt > startedAt) {
+        this.setData({
+          hasLocation: true,
+          locating: false,
+          locationStatusText: "自定义目的地"
+        });
+        return;
+      }
+      this.setData({
+        hasLocation: true,
+        locating: false,
+        locationStatusText: "已定位"
+      });
+      await this.setDestination(destination, { source: "location" });
+      if (locateOptions.showToast) {
+        wx.showToast({ title: "已定位", icon: "success" });
+      }
+    } catch (error) {
+      console.error("locateCurrentDestination error:", error && error.errMsg ? error.errMsg : error);
+      app.globalData.userLocation = null;
+      this.setData({
+        hasLocation: false,
+        locating: false,
+        locationStatusText: "定位失败",
+        destinationName: "选择目的地",
+        destinationAddress: "无法获取当前位置，可手动选择目的地",
+        summary: "无法获取当前位置，可手动选择目的地后推荐附近停车场。",
+        emptyText: "无法获取当前位置。请选择目的地后查看推荐。"
+      });
+      const savedDestination = wx.getStorageSync(DESTINATION_KEY);
+      const fallbackDestination = previousDestination || savedDestination;
+      if (fallbackDestination && fallbackDestination.latitude && fallbackDestination.longitude) {
+        app.globalData.destination = fallbackDestination;
+        this.setData({ locationStatusText: previousDestination ? "保留当前目的地" : "使用上次目的地" });
+        this.applyDestination(fallbackDestination);
+        await this.refreshRecommendations();
+      }
+      if (locateOptions.showToast) {
+        wx.showToast({ title: "无法获取定位", icon: "none" });
+      }
+    }
   },
 
   searchDestinationCandidates() {
@@ -451,7 +768,7 @@ Page({
       return;
     }
     const matches = this.refreshDestinationMatches(keyword);
-    if (!matches || !this.data.hasDestinationMatches) {
+    if (!matches || matches.length === 0) {
       wx.showToast({ title: "暂无匹配结果", icon: "none" });
     }
   },
@@ -498,23 +815,15 @@ Page({
     this.refreshRecommendations();
   },
 
+  toggleDurationPicker() {
+    if (!this.data.sheetExpanded) {
+      this.setSheetExpanded(true);
+    }
+    this.setData({ showDurationPicker: !this.data.showDurationPicker });
+  },
+
   useCurrentLocationAsDestination() {
-    wx.getLocation({
-      type: "gcj02",
-      success: (res) => {
-        app.globalData.userLocation = { latitude: res.latitude, longitude: res.longitude };
-        this.setDestination({
-          name: "当前位置",
-          address: "已使用当前位置作为目的地",
-          latitude: res.latitude,
-          longitude: res.longitude
-        });
-        wx.showToast({ title: "已设为目的地", icon: "success" });
-      },
-      fail: () => {
-        wx.showToast({ title: "无法获取定位", icon: "none" });
-      }
-    });
+    this.locateCurrentDestination({ showToast: true, force: true });
   },
 
   findLoadedLot(id) {

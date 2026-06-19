@@ -248,6 +248,12 @@ async function asyncAddVehicle(plate, type) {
   return normalized;
 }
 
+async function asyncUpdateVehicle(id, plate, type) {
+  const vehicle = await api.updateVehicle(id, plate, type);
+  if (!vehicle) throw new Error("更新车辆失败");
+  return normalizeVehicles([vehicle])[0];
+}
+
 async function asyncDeleteVehicle(id) {
   const success = await api.deleteVehicle(id);
   if (!success) throw new Error("删除车辆失败");
@@ -275,5 +281,6 @@ module.exports = {
   asyncGetUserVehicles,
   asyncGetCurrentVehicle,
   asyncAddVehicle,
+  asyncUpdateVehicle,
   asyncDeleteVehicle
 };

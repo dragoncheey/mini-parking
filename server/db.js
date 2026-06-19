@@ -493,6 +493,26 @@ async function addVehicle(userOpenid, plate, type) {
   return data;
 }
 
+async function updateVehicle(userOpenid, vehicleId, plate, type) {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("vehicles")
+    .update({ plate, type })
+    .eq("id", vehicleId)
+    .eq("user_openid", userOpenid)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("PLATE_DUPLICATED");
+    }
+    throw new Error(`updateVehicle failed: ${error.message}`);
+  }
+  return data || null;
+}
+
 async function deleteVehicle(userOpenid, vehicleId) {
   const supabase = getSupabase();
 
@@ -522,6 +542,7 @@ module.exports = {
   getUserVote,
   getUserVehicles,
   addVehicle,
+  updateVehicle,
   deleteVehicle,
   // Exposed for seed script and direct access if needed
   getSupabase,

@@ -1,11 +1,7 @@
 <view class="page vehicles-page">
-  <view class="header-panel">
-    <text class="page-title">车辆管理</text>
-    <text class="page-copy">当前仅支持小型车辆。选择当前车辆后，停车推荐会按新能源或燃油车规则计算费用。</text>
-    <view class="current-line">
-      <text class="current-label">当前车辆</text>
-      <text class="current-value">{{currentVehicleLabel}}</text>
-    </view>
+  <view class="vehicles-nav">
+    <text class="back-mark">‹</text>
+    <text class="nav-title">我的爱车</text>
   </view>
 
   <view wx:if="{{loginRequired}}" class="login-panel">
@@ -15,32 +11,35 @@
   </view>
 
   <block wx:else>
-    <view class="form-section">
-      <text class="section-title">新增车辆</text>
-      <view class="field">
-        <text class="field-label">车牌号</text>
-        <input class="field-input" value="{{form.plateNumber}}" data-key="plateNumber" bindinput="onInput" placeholder="例如：苏D12345D" />
+    <view class="current-card">
+      <view class="current-card-top">
+        <view>
+          <text class="current-label">当前车辆</text>
+          <text class="current-value">{{currentVehicleLabel}}</text>
+        </view>
+        <button class="secondary-button add-entry-button" bindtap="openAddPanel">添加爱车</button>
       </view>
-      <view class="field">
-        <text class="field-label">车辆类型</text>
-        <picker mode="selector" range="{{vehicleTypeOptions}}" range-key="label" bindchange="onVehicleTypeChange">
-          <view class="picker-value">{{form.vehicleType === 'new_energy' ? '新能源小型车' : '燃油小型车'}}</view>
-        </picker>
-      </view>
-      <button class="primary-button save-button" bindtap="addVehicle">添加车辆</button>
+      <text class="current-copy">绑定车牌号可按燃油车或新能源车自动匹配停车优惠。</text>
     </view>
 
     <view class="list-section">
-      <text class="section-title">我的车辆</text>
       <view wx:if="{{vehicles.length}}">
         <view
           wx:for="{{vehicles}}"
           wx:key="id"
-          class="vehicle-card {{item.id === currentVehicleId ? 'is-current' : ''}}"
+          class="vehicle-card {{item.id === currentVehicleId ? 'is-current' : ''}} {{item.energyClass}}"
         >
-          <view class="vehicle-main">
-            <text class="plate-number">{{item.plateNumber}}</text>
-            <text class="vehicle-meta">{{item.vehicleTypeLabel}} · {{item.sizeTypeLabel}}</text>
+          <view class="vehicle-card-head">
+            <text class="plate-number">{{item.plateDisplay}}</text>
+            <button
+              class="settings-button"
+              data-id="{{item.id}}"
+              bindtap="openEditPanel"
+              aria-label="编辑车牌号"
+            >⚙</button>
+          </view>
+          <view class="vehicle-card-body">
+            <text class="energy-badge">{{item.vehicleTypeLabel}}</text>
           </view>
           <view class="vehicle-actions">
             <button class="secondary-button small-button" data-id="{{item.id}}" bindtap="useVehicle">设当前</button>
@@ -51,4 +50,91 @@
       <view wx:else class="empty">{{emptyText}}</view>
     </view>
   </block>
+
+  <view wx:if="{{showAddPanel}}" class="plate-overlay" bindtap="closeAddPanel">
+    <view class="plate-sheet" catchtap="stopPanelTap">
+      <text class="sheet-title">{{panelTitle}}</text>
+
+      <view class="plate-preview-card">
+        <view class="plate-slots">
+          <view
+            wx:for="{{form.plateSlots}}"
+            wx:key="index"
+            class="plate-slot {{item.filled ? 'is-filled' : ''}} {{item.active ? 'is-active' : ''}} {{index === 7 ? 'is-energy-slot' : ''}}"
+            data-index="{{index}}"
+            bindtap="setPlateFocus"
+          >
+            <text>{{item.value}}</text>
+          </view>
+        </view>
+        <view class="plate-benefit-row">
+          <text class="benefit-icon">✓</text>
+          <text>绑定车牌号可识别车型专属优惠</text>
+        </view>
+        <view class="auto-type-row">
+          <text>已识别</text>
+          <text class="auto-type-value">{{form.vehicleTypeLabel}}</text>
+        </view>
+      </view>
+
+      <view class="keyboard-panel">
+        <block wx:if="{{form.keyboardMode === 'province'}}">
+          <view
+            wx:for="{{provinceKeys}}"
+            wx:for-item="row"
+            wx:key="*this"
+            class="keyboard-row"
+          >
+            <view
+              wx:for="{{row}}"
+              wx:for-item="key"
+              wx:key="*this"
+              class="keyboard-key"
+              data-key="{{key}}"
+              bindtap="onPlateKeyTap"
+            >{{key}}</view>
+          </view>
+        </block>
+        <block wx:else>
+          <view
+            wx:if="{{form.activePlateIndex === 1}}"
+            wx:for="{{firstLetterKeys}}"
+            wx:for-item="row"
+            wx:key="*this"
+            class="keyboard-row"
+          >
+            <view
+              wx:for="{{row}}"
+              wx:for-item="key"
+              wx:key="*this"
+              class="keyboard-key"
+              data-key="{{key}}"
+              bindtap="onPlateKeyTap"
+            >{{key}}</view>
+          </view>
+          <view
+            wx:if="{{form.activePlateIndex !== 1}}"
+            wx:for="{{letterKeys}}"
+            wx:for-item="row"
+            wx:key="*this"
+            class="keyboard-row"
+          >
+            <view
+              wx:for="{{row}}"
+              wx:for-item="key"
+              wx:key="*this"
+              class="keyboard-key {{key === '删除' ? 'is-delete' : ''}}"
+              data-key="{{key}}"
+              bindtap="onPlateKeyTap"
+            >{{key}}</view>
+          </view>
+          <view wx:if="{{form.activePlateIndex === 1}}" class="keyboard-row">
+            <view class="keyboard-key is-delete" data-key="删除" bindtap="onPlateKeyTap">删除</view>
+          </view>
+        </block>
+      </view>
+
+      <button class="confirm-button" loading="{{loading}}" bindtap="saveVehicle">{{confirmButtonText}}</button>
+    </view>
+  </view>
 </view>

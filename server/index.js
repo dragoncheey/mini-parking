@@ -370,6 +370,18 @@ async function handleAddVehicle(req, res, openid) {
   sendJson(res, 201, { data: vehicle });
 }
 
+async function handleUpdateVehicle(req, res, params, openid) {
+  const { plate, type } = await readJsonBody(req);
+  if (!plate) {
+    return sendError(res, 400, "plate is required", "MISSING_PLATE");
+  }
+  const vehicle = await db.updateVehicle(openid, params.id, plate, type || "fuel");
+  if (!vehicle) {
+    return sendError(res, 404, "vehicle not found", "NOT_FOUND");
+  }
+  sendJson(res, 200, { data: vehicle });
+}
+
 async function handleDeleteVehicle(req, res, params, openid) {
   const deleted = await db.deleteVehicle(openid, params.id);
   if (!deleted) {
@@ -560,6 +572,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // PUT /api/vehicles/:id (auth required)
+    params = matchRoute("/api/vehicles/:id", "PUT", method, pathname);
+    if (params) {
+      await handleUpdateVehicle(req, res, params, openid);
+      return;
+    }
+
     // DELETE /api/vehicles/:id (auth required)
     params = matchRoute("/api/vehicles/:id", "DELETE", method, pathname);
     if (params) {
@@ -586,6 +605,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (err.message.includes("not authorized")) {
       return sendError(res, 403, err.message, "FORBIDDEN");
+    }
+    if (err.message.includes("PLATE_DUPLICATED")) {
+      return sendError(res, 409, "PLATE_DUPLICATED", "PLATE_DUPLICATED");
     }
     if (err.message.includes("Could not find the table")
       || err.message.includes("schema cache")) {

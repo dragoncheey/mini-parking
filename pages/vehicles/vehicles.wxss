@@ -1,59 +1,81 @@
 .vehicles-page {
-  padding-bottom: 56rpx;
+  min-height: 100vh;
+  padding: 24rpx 36rpx 56rpx;
+  background: #f5f7f9;
 }
 
-.header-panel,
+.vehicles-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 92rpx;
+}
+
+.back-mark {
+  position: absolute;
+  left: 0;
+  top: 12rpx;
+  color: #18212f;
+  font-size: 68rpx;
+  line-height: 1;
+}
+
+.nav-title {
+  color: #111827;
+  font-size: 36rpx;
+  font-weight: 900;
+}
+
 .login-panel,
-.form-section,
-.list-section {
+.current-card,
+.vehicle-card {
   border: 1rpx solid #dce4ec;
   border-radius: 8rpx;
   background: #ffffff;
 }
 
-.header-panel,
 .login-panel,
-.form-section,
-.list-section {
+.current-card {
+  margin-top: 24rpx;
   padding: 28rpx;
 }
 
-.login-panel,
-.form-section,
-.list-section {
-  margin-top: 20rpx;
-}
-
-.page-title,
-.page-copy,
 .login-title,
 .login-copy,
-.section-title,
 .current-label,
-.current-value {
+.current-value,
+.current-copy,
+.plate-number,
+.vehicle-meta,
+.sheet-title {
   display: block;
 }
 
-.page-title {
-  color: #111827;
-  font-size: 40rpx;
-  font-weight: 900;
-  line-height: 1.2;
+.login-title {
+  color: #18212f;
+  font-size: 30rpx;
+  font-weight: 800;
 }
 
-.page-copy,
-.login-copy {
+.login-copy,
+.current-copy {
   margin-top: 12rpx;
   color: #657286;
   font-size: 26rpx;
   line-height: 1.5;
 }
 
-.current-line {
+.login-button {
+  width: 100%;
   margin-top: 24rpx;
-  padding: 20rpx;
-  border-radius: 6rpx;
-  background: #f2f8f6;
+}
+
+.current-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
 }
 
 .current-label {
@@ -68,97 +90,302 @@
   font-weight: 900;
 }
 
-.login-title,
-.section-title {
-  color: #18212f;
-  font-size: 30rpx;
-  font-weight: 800;
-}
-
-.login-button,
-.save-button {
-  width: 100%;
-  margin-top: 24rpx;
-}
-
-.field {
-  margin-top: 20rpx;
-}
-
-.field-label {
-  display: block;
-  margin-bottom: 10rpx;
-  color: #435268;
+.add-entry-button {
+  flex: 0 0 176rpx;
+  width: 176rpx;
+  min-height: 64rpx;
+  padding: 0 14rpx;
   font-size: 24rpx;
-  font-weight: 700;
 }
 
-.field-input,
-.picker-value {
-  width: 100%;
-  min-height: 76rpx;
-  padding: 0 20rpx;
-  border: 1rpx solid #d9e2ea;
-  border-radius: 6rpx;
-  background: #f8fafc;
-  color: #18212f;
-  font-size: 28rpx;
-}
-
-.picker-value {
-  display: flex;
-  align-items: center;
+.list-section {
+  margin-top: 22rpx;
 }
 
 .vehicle-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
+  position: relative;
+  min-height: 260rpx;
   margin-top: 18rpx;
-  padding: 20rpx;
-  border: 1rpx solid #e5ebf0;
+  padding: 32rpx;
+  overflow: hidden;
+  background: linear-gradient(135deg, #ffffff 0%, #eef8f5 100%);
+}
+
+.vehicle-card.is-new-energy::after,
+.vehicle-card.is-fuel::after {
+  content: "";
+  position: absolute;
+  right: -20rpx;
+  bottom: -12rpx;
+  width: 260rpx;
+  height: 180rpx;
+  opacity: 0.22;
+  background: linear-gradient(135deg, rgba(22, 106, 91, 0.05), rgba(47, 127, 237, 0.24));
   border-radius: 8rpx;
-  background: #f8fafc;
 }
 
 .vehicle-card.is-current {
   border-color: #8fcbbb;
-  background: #eff8f5;
+  box-shadow: 0 12rpx 34rpx rgba(22, 106, 91, 0.1);
 }
 
-.vehicle-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.plate-number,
-.vehicle-meta {
-  display: block;
+.vehicle-card-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
 }
 
 .plate-number {
   color: #111827;
-  font-size: 30rpx;
+  font-size: 42rpx;
   font-weight: 900;
-  line-height: 1.25;
+  line-height: 1.2;
+}
+
+.settings-button {
+  flex: 0 0 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  min-height: 56rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #273140;
+  background: transparent;
+  font-size: 34rpx;
+  line-height: 1;
+}
+
+.settings-button::after {
+  border: 0;
+}
+
+.vehicle-card-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 118rpx;
+}
+
+.energy-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42rpx;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  color: #143d35;
+  background: #dff3ef;
+  font-size: 24rpx;
+  font-weight: 800;
 }
 
 .vehicle-meta {
-  margin-top: 8rpx;
   color: #657286;
   font-size: 24rpx;
 }
 
 .vehicle-actions {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 10rpx;
-  flex: 0 0 132rpx;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 22rpx;
 }
 
 .small-button {
   min-height: 58rpx;
   padding: 0 12rpx;
   font-size: 23rpx;
+}
+
+.plate-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.plate-sheet {
+  width: 100%;
+  padding: 34rpx 18rpx calc(env(safe-area-inset-bottom) + 52rpx);
+  border-radius: 42rpx 42rpx 0 0;
+  background: #ffffff;
+}
+
+.sheet-title {
+  color: #111827;
+  font-size: 36rpx;
+  font-weight: 900;
+  text-align: center;
+}
+
+.plate-preview-card {
+  position: relative;
+  margin-top: 56rpx;
+  padding: 96rpx 36rpx 82rpx;
+  overflow: hidden;
+  border: 1rpx dashed #a9b2bd;
+  border-radius: 8rpx;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.96));
+}
+
+.plate-preview-card::after {
+  content: "";
+  position: absolute;
+  right: 30rpx;
+  bottom: 8rpx;
+  width: 280rpx;
+  height: 180rpx;
+  opacity: 0.16;
+  border-radius: 8rpx;
+  background: linear-gradient(135deg, rgba(22, 106, 91, 0.12), rgba(47, 127, 237, 0.2));
+}
+
+.plate-slots {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 18rpx;
+}
+
+.plate-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  border: 1rpx solid transparent;
+  border-radius: 8rpx;
+  color: #111827;
+  background: rgba(235, 237, 240, 0.82);
+  font-size: 36rpx;
+  font-weight: 900;
+}
+
+.plate-slot.is-filled {
+  color: #ffffff;
+  background: #13b59a;
+  box-shadow: 0 4rpx 12rpx rgba(19, 181, 154, 0.24);
+}
+
+.plate-slot.is-active {
+  border-color: #8dd8cf;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.plate-slot.is-filled.is-active {
+  color: #ffffff;
+  border-color: #0e9e86;
+  background: #13b59a;
+}
+
+.plate-slot.is-energy-slot {
+  background: rgba(240, 250, 248, 0.88);
+  border-color: #d8ebe8;
+}
+
+.plate-benefit-row,
+.auto-type-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  color: #8a94a3;
+  font-size: 26rpx;
+}
+
+.plate-benefit-row {
+  margin-top: 72rpx;
+}
+
+.benefit-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #166a5b;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.auto-type-row {
+  margin-top: 18rpx;
+}
+
+.auto-type-value {
+  color: #13a58d;
+  font-weight: 900;
+}
+
+.keyboard-panel {
+  margin: 28rpx -18rpx 0;
+  padding: 20rpx 16rpx 22rpx;
+  border-radius: 8rpx;
+  background: #e7e8ea;
+}
+
+.keyboard-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 8rpx;
+  margin-top: 12rpx;
+}
+
+.keyboard-row:first-child {
+  margin-top: 0;
+}
+
+.keyboard-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70rpx;
+  border-radius: 6rpx;
+  color: #111827;
+  background: #ffffff;
+  box-shadow: 0 2rpx 0 rgba(0, 0, 0, 0.04);
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.keyboard-key.is-delete {
+  grid-column: span 2;
+  color: #111827;
+  background: #c9cbd1;
+  font-size: 26rpx;
+}
+
+.confirm-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(100% - 54rpx);
+  min-height: 82rpx;
+  margin: 26rpx auto 0;
+  border-radius: 8rpx;
+  color: #ffffff;
+  background: #403d58;
+  font-size: 34rpx;
+  font-weight: 800;
 }

@@ -267,6 +267,12 @@ async function addVehicle(plate, type) {
   return res.data || null;
 }
 
+async function updateVehicle(id, plate, type) {
+  const path = "/api/vehicles/" + encodeURIComponent(id);
+  const res = await request("PUT", path, { plate, type });
+  return res.data || null;
+}
+
 async function deleteVehicle(id) {
   const res = await request("DELETE", "/api/vehicles/" + encodeURIComponent(id));
   return res.success === true;
@@ -377,6 +383,7 @@ module.exports = {
   // Vehicles
   getVehicles,
   addVehicle,
+  updateVehicle,
   deleteVehicle,
   // Upload
   uploadImage
