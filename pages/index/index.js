@@ -23,6 +23,8 @@ const SHEET_COLLAPSED_HEIGHT = 328;
 const SHEET_MAP_GAP = 96;
 const SHEET_ANIMATION_MS = 220;
 const SHEET_DRAG_THRESHOLD = 56;
+const MAP_VISIBLE_GAP = 0;
+const MAP_GESTURE_RESTORE_MS = 80;
 
 const recommendationModes = [
   { value: "distance", label: "距离最近" },
@@ -156,7 +158,9 @@ Page({
     sheetAnimating: false,
     sheetHeightPx: SHEET_COLLAPSED_HEIGHT,
     sheetTranslateY: 0,
+    mapViewportHeightPx: 392,
     mapLocateBottomPx: SHEET_COLLAPSED_HEIGHT + 24,
+    mapGestureEnabled: true,
     durationDayOptions,
     durationHourOptions,
     durationMinuteOptions,
@@ -228,11 +232,19 @@ Page({
     const expandedHeight = Math.max(SHEET_COLLAPSED_HEIGHT, windowHeight - SHEET_MAP_GAP);
     this._sheetCollapsedHeight = SHEET_COLLAPSED_HEIGHT;
     this._sheetExpandedHeight = expandedHeight;
+    this._windowHeight = windowHeight;
+    const sheetHeight = this.data.sheetExpanded ? expandedHeight : SHEET_COLLAPSED_HEIGHT;
     this.setData({
-      sheetHeightPx: this.data.sheetExpanded ? expandedHeight : SHEET_COLLAPSED_HEIGHT,
+      sheetHeightPx: sheetHeight,
       sheetTranslateY: 0,
-      mapLocateBottomPx: (this.data.sheetExpanded ? expandedHeight : SHEET_COLLAPSED_HEIGHT) + 24
+      mapViewportHeightPx: this.getMapViewportHeight(sheetHeight),
+      mapLocateBottomPx: sheetHeight + 24
     });
+  },
+
+  getMapViewportHeight(sheetHeight) {
+    const windowHeight = this._windowHeight || 720;
+    return Math.max(0, windowHeight - sheetHeight + MAP_VISIBLE_GAP);
   },
 
   setSheetExpanded(expanded) {
@@ -242,6 +254,7 @@ Page({
       sheetAnimating: true,
       sheetHeightPx: sheetHeight,
       sheetTranslateY: 0,
+      mapViewportHeightPx: this.getMapViewportHeight(sheetHeight),
       mapLocateBottomPx: sheetHeight + 24
     });
     if (this._sheetAnimationTimer) {
@@ -270,6 +283,7 @@ Page({
   onSheetTouchStart(event) {
     const touch = event.touches && event.touches[0];
     if (!touch) return;
+    this.onSheetInteractionStart();
     this._sheetDragStartY = touch.clientY;
     this._sheetDragStartHeight = this.data.sheetHeightPx;
     this._sheetDragStartExpanded = this.data.sheetExpanded;
@@ -289,6 +303,7 @@ Page({
     this.setData({
       sheetHeightPx: nextHeight,
       sheetTranslateY: 0,
+      mapViewportHeightPx: this.getMapViewportHeight(nextHeight),
       mapLocateBottomPx: nextHeight + 24
     });
   },
@@ -305,12 +320,34 @@ Page({
     this._sheetDragStartHeight = null;
     this._ignoreNextSheetTap = didDrag;
     this.setSheetExpanded(shouldExpand);
+    this.onSheetInteractionEnd();
   },
 
   onSheetTouchCancel() {
     this._sheetDragStartY = null;
     this._sheetDragStartHeight = null;
     this.setSheetExpanded(this.data.sheetExpanded);
+    this.onSheetInteractionEnd();
+  },
+
+  onSheetInteractionStart() {
+    if (this._mapGestureRestoreTimer) {
+      clearTimeout(this._mapGestureRestoreTimer);
+      this._mapGestureRestoreTimer = null;
+    }
+    if (this.data.mapGestureEnabled) {
+      this.setData({ mapGestureEnabled: false });
+    }
+  },
+
+  onSheetInteractionEnd() {
+    if (this._mapGestureRestoreTimer) {
+      clearTimeout(this._mapGestureRestoreTimer);
+    }
+    this._mapGestureRestoreTimer = setTimeout(() => {
+      this.setData({ mapGestureEnabled: true });
+      this._mapGestureRestoreTimer = null;
+    }, MAP_GESTURE_RESTORE_MS);
   },
 
   restoreLogin() {

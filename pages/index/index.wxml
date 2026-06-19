@@ -1,12 +1,14 @@
 <view class="page index-page">
   <map
     class="map-background"
+    style="height: {{mapViewportHeightPx}}px;"
     latitude="{{mapLatitude}}"
     longitude="{{mapLongitude}}"
     scale="{{mapScale}}"
     markers="{{mapMarkers}}"
     include-points="{{mapPoints}}"
     show-location="{{hasLocation}}"
+    enable-scroll="{{mapGestureEnabled}}"
     bindmarkertap="onMarkerTap"
   ></map>
 
@@ -55,6 +57,9 @@
   <view
     class="bottom-sheet {{sheetExpanded ? 'is-expanded' : 'is-collapsed'}} {{sheetAnimating ? 'is-animating' : ''}}"
     style="height: {{sheetHeightPx}}px; transform: translateY({{sheetTranslateY}}px);"
+    bindtouchstart="onSheetInteractionStart"
+    bindtouchend="onSheetInteractionEnd"
+    bindtouchcancel="onSheetInteractionEnd"
   >
     <view class="sheet-plan-card">
       <view
