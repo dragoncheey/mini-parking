@@ -58,30 +58,6 @@
       <text class="section-title">收费规则</text>
       <text class="body-text">{{detail.pricingText}}</text>
       <text wx:if="{{lot.pricing.maxDailyPrice}}" class="body-hint">单日封顶 {{lot.pricing.maxDailyPrice}} 元</text>
-      <view class="data-row">
-        <text class="data-label">收费方式</text>
-        <text class="data-value">{{collectionModeText}}</text>
-      </view>
-      <view wx:if="{{pricingMethodText}}" class="data-row">
-        <text class="data-label">定价方式</text>
-        <text class="data-value">{{pricingMethodText}}</text>
-      </view>
-      <view wx:if="{{operatorNameText}}" class="data-row">
-        <text class="data-label">收费单位</text>
-        <text class="data-value">{{operatorNameText}}</text>
-      </view>
-      <view wx:if="{{complaintPhoneText}}" class="data-row">
-        <text class="data-label">投诉电话</text>
-        <text class="data-value">{{complaintPhoneText}}</text>
-      </view>
-      <view wx:if="{{vehicleRowCount}}" class="vehicle-row-list">
-        <view wx:for="{{vehicleRows}}" wx:key="label" class="vehicle-row-item">
-          <text class="vehicle-row-label">{{item.label}}</text>
-          <text class="vehicle-row-value">{{item.temporaryText}}</text>
-          <text wx:if="{{item.overnightPrice}}" class="vehicle-row-extra">过夜 {{item.overnightPrice}} 元/天</text>
-          <text wx:if="{{item.monthlyPrice}}" class="vehicle-row-extra">月卡 {{item.monthlyPrice}} 元/月</text>
-        </view>
-      </view>
     </view>
 
     <view class="section">

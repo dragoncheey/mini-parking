@@ -106,7 +106,7 @@ function testRecognitionParsing() {
   assert.strictEqual(mock.pricing.unitPrice, 5);
   assert.strictEqual(mock.pricing.maxDailyPrice, 40);
 
-  const tariffBoard = normalizeRecognition({
+  const tariffBoardText = normalizeRecognition({
     name: "Xx小区停车场",
     pricing: {
       chargeType: "hourly",
@@ -136,13 +136,12 @@ function testRecognitionParsing() {
     },
     confidence: 88
   });
-  assert.strictEqual(tariffBoard.pricing.chargeType, "hourly");
-  assert.strictEqual(tariffBoard.pricing.freeMinutes, 30);
-  assert.strictEqual(tariffBoard.pricing.maxDailyPrice, 15);
-  assert.strictEqual(tariffBoard.pricing.collectionMode, "auto_gate");
-  assert.strictEqual(tariffBoard.pricing.tariffBoard.pricingMethod, "政府指导价");
-  assert.strictEqual(tariffBoard.pricing.tariffBoard.vehicleRows[0].label, "小车");
-  assert.strictEqual(tariffBoard.pricing.pricingByVehicle.new_energy.freeMinutes, 120);
+  assert.strictEqual(tariffBoardText.pricing.chargeType, "hourly");
+  assert.strictEqual(tariffBoardText.pricing.freeMinutes, 30);
+  assert.strictEqual(tariffBoardText.pricing.maxDailyPrice, 15);
+  assert.strictEqual(tariffBoardText.pricing.collectionMode, undefined);
+  assert.strictEqual(tariffBoardText.pricing.tariffBoard, undefined);
+  assert.strictEqual(tariffBoardText.pricing.pricingByVehicle.new_energy.freeMinutes, 120);
 
   const flatMock = buildMockRecognition({
     form: {
@@ -155,7 +154,7 @@ function testRecognitionParsing() {
   assert.strictEqual(flatMock.pricing.flatDurationMinutes, 1440);
   assert.strictEqual(flatMock.pricing.flatPrice, 10);
   assert.strictEqual(flatMock.pricing.flatRepeat, true);
-  assert.strictEqual(flatMock.pricing.collectionMode, "auto_gate");
+  assert.strictEqual(flatMock.pricing.collectionMode, undefined);
 }
 
 function testServerAuthHelpers() {

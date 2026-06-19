@@ -25,13 +25,6 @@ const chargeTypeOptions = [
   { label: "阶梯计费", value: "ladder" }
 ];
 
-const collectionModeOptions = [
-  { label: "自动闸机/自助", value: "auto_gate" },
-  { label: "人工收费", value: "manual" },
-  { label: "自动+人工", value: "mixed" },
-  { label: "待确认", value: "unknown" }
-];
-
 function numberFromForm(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -73,8 +66,6 @@ function buildEmptyForm() {
     newEnergyFreeMinutes: "120", newEnergyBillingUnitMinutes: "",
     newEnergyUnitPrice: "", newEnergyMaxDailyPrice: "",
     newEnergyFlatDurationMinutes: "", newEnergyFlatPrice: "", newEnergyNotes: "",
-    collectionMode: "unknown",
-    pricingMethod: "", operatorName: "", complaintPhone: "", vehicleRowsJson: "",
     walkingPenaltyMinutes: "0"
   };
 }
@@ -86,7 +77,6 @@ function formFromLot(lot) {
   const pricingByVehicle = pricing.pricingByVehicle || {};
   const newEnergyRule = pricingByVehicle.new_energy || null;
   const access = lot.access || {};
-  const tariffBoard = pricing.tariffBoard || {};
 
   return {
     name: textValue(lot.name),
@@ -114,13 +104,6 @@ function formFromLot(lot) {
     newEnergyFlatDurationMinutes: newEnergyRule ? optionalTextValue(newEnergyRule.flatDurationMinutes) : "",
     newEnergyFlatPrice: newEnergyRule ? optionalTextValue(newEnergyRule.flatPrice) : "",
     newEnergyNotes: newEnergyRule ? textValue(newEnergyRule.notes) : "",
-    collectionMode: textValue(pricing.collectionMode || "unknown"),
-    pricingMethod: textValue(tariffBoard.pricingMethod),
-    operatorName: textValue(tariffBoard.operatorName),
-    complaintPhone: textValue(tariffBoard.complaintPhone),
-    vehicleRowsJson: Array.isArray(tariffBoard.vehicleRows) && tariffBoard.vehicleRows.length
-      ? JSON.stringify(tariffBoard.vehicleRows, null, 2)
-      : "",
     walkingPenaltyMinutes: textValue(access.walkingPenaltyMinutes || 0)
   };
 }
@@ -135,9 +118,6 @@ Page({
     chargeTypeLabel: chargeTypeOptions[0].label,
     isFlatChargeType: false,
     isLadderChargeType: false,
-    collectionModeOptions,
-    collectionModeIndex: 3,
-    collectionModeLabel: collectionModeOptions[3].label,
     isLoggedIn: false,
     loginRequired: true,
     isEditing: false,
@@ -197,8 +177,6 @@ Page({
       chargeTypeLabel: chargeTypeOptions[0].label,
       isFlatChargeType: false,
       isLadderChargeType: false,
-      collectionModeIndex: 3,
-      collectionModeLabel: collectionModeOptions[3].label,
       evidencePhotos: [],
       photoCount: 0,
       recognitionStatus: "未采集照片",
@@ -308,7 +286,6 @@ Page({
 
     const form = formFromLot(lot);
     const chargeTypeIndex = optionIndex(chargeTypeOptions, form.chargeType, 0);
-    const collectionModeIndex = optionIndex(collectionModeOptions, form.collectionMode, 3);
 
     this.setData({
       isEditing: true,
@@ -322,8 +299,6 @@ Page({
       chargeTypeLabel: chargeTypeOptions[chargeTypeIndex].label,
       isFlatChargeType: form.chargeType === "flat",
       isLadderChargeType: form.chargeType === "ladder",
-      collectionModeIndex,
-      collectionModeLabel: collectionModeOptions[collectionModeIndex].label,
       evidencePhotos: photos,
       photoCount: photos.length,
       recognitionStatus: evidence.recognitionStatus || (photos.length ? "已采集，待复核" : "未采集照片"),
@@ -362,16 +337,6 @@ Page({
       isFlatChargeType: option.value === "flat",
       isLadderChargeType: option.value === "ladder",
       "form.chargeType": option.value
-    });
-  },
-
-  onCollectionModeChange(event) {
-    const collectionModeIndex = Number(event.detail.value);
-    const option = collectionModeOptions[collectionModeIndex] || collectionModeOptions[3];
-    this.setData({
-      collectionModeIndex,
-      collectionModeLabel: option.label,
-      "form.collectionMode": option.value
     });
   },
 
@@ -494,7 +459,6 @@ Page({
     const location = result.location || {};
     const pricingByVehicle = pricing.pricingByVehicle || {};
     const newEnergyRule = pricingByVehicle.new_energy || null;
-    const tariffBoard = pricing.tariffBoard || {};
     const warnings = Array.isArray(result.warnings) ? result.warnings : [];
     const updates = {
       "form.name": result.name || this.data.form.name,
@@ -512,13 +476,6 @@ Page({
       "form.ladderJson": Array.isArray(pricing.ladder) && pricing.ladder.length
         ? JSON.stringify(pricing.ladder, null, 2)
         : this.data.form.ladderJson,
-      "form.collectionMode": pricing.collectionMode || result.collectionMode || this.data.form.collectionMode,
-      "form.pricingMethod": tariffBoard.pricingMethod || this.data.form.pricingMethod,
-      "form.operatorName": tariffBoard.operatorName || this.data.form.operatorName,
-      "form.complaintPhone": tariffBoard.complaintPhone || this.data.form.complaintPhone,
-      "form.vehicleRowsJson": Array.isArray(tariffBoard.vehicleRows) && tariffBoard.vehicleRows.length
-        ? JSON.stringify(tariffBoard.vehicleRows, null, 2)
-        : this.data.form.vehicleRowsJson,
       "form.notes": pricing.notes || this.data.form.notes,
       "form.walkingPenaltyMinutes": `${result.walkingPenaltyMinutes == null ? this.data.form.walkingPenaltyMinutes : result.walkingPenaltyMinutes}`,
       recognitionWarnings: warnings,
@@ -537,13 +494,6 @@ Page({
       updates.chargeTypeLabel = chargeTypeOptions[index].label;
       updates.isFlatChargeType = pricing.chargeType === "flat";
       updates.isLadderChargeType = pricing.chargeType === "ladder";
-    }
-
-    const collectionMode = pricing.collectionMode || result.collectionMode;
-    if (collectionMode) {
-      const index = optionIndex(collectionModeOptions, collectionMode, 3);
-      updates.collectionModeIndex = index;
-      updates.collectionModeLabel = collectionModeOptions[index].label;
     }
 
     if (newEnergyRule) {
@@ -628,14 +578,6 @@ Page({
       if (numberFromForm(form.billingUnitMinutes, 0) <= 0) return "计费单位必须大于 0";
       if (numberFromForm(form.unitPrice, -1) < 0) return "价格不能为负数";
     }
-    if (form.vehicleRowsJson.trim()) {
-      try {
-        const vehicleRows = JSON.parse(form.vehicleRowsJson);
-        if (!Array.isArray(vehicleRows)) return "车型收费明细必须是数组";
-      } catch (error) {
-        return "车型收费明细必须是合法 JSON";
-      }
-    }
     return "";
   },
 
@@ -647,13 +589,7 @@ Page({
       freeMinutes: numberFromForm(form.freeMinutes, 0),
       maxDailyPrice: numberFromForm(form.maxDailyPrice, 0),
       minCharge: numberFromForm(form.minCharge, 0),
-      collectionMode: form.collectionMode || "unknown",
-      notes: form.notes.trim(),
-      tariffBoard: {
-        pricingMethod: form.pricingMethod.trim(),
-        operatorName: form.operatorName.trim(),
-        complaintPhone: form.complaintPhone.trim()
-      }
+      notes: form.notes.trim()
     };
 
     if (basePricing.chargeType === "flat") {
@@ -665,15 +601,6 @@ Page({
     } else {
       basePricing.billingUnitMinutes = numberFromForm(form.billingUnitMinutes, 60);
       basePricing.unitPrice = numberFromForm(form.unitPrice, 0);
-    }
-
-    if (!basePricing.tariffBoard.pricingMethod
-      && !basePricing.tariffBoard.operatorName
-      && !basePricing.tariffBoard.complaintPhone
-      && !form.vehicleRowsJson.trim()) {
-      delete basePricing.tariffBoard;
-    } else if (form.vehicleRowsJson.trim()) {
-      basePricing.tariffBoard.vehicleRows = JSON.parse(form.vehicleRowsJson);
     }
 
     if (form.newEnergyEnabled) {

@@ -59,22 +59,6 @@ function normalizeChargeType(value, source) {
   return "hourly";
 }
 
-function normalizeCollectionMode(value) {
-  const text = String(value || "").trim().toLowerCase();
-  if (!text) return "unknown";
-  if (text === "auto_gate" || text === "automatic" || text === "auto"
-    || text.indexOf("自动") >= 0 || text.indexOf("闸机") >= 0 || text.indexOf("取卡") >= 0 || text.indexOf("读卡") >= 0) {
-    return "auto_gate";
-  }
-  if (text === "manual" || text.indexOf("人工") >= 0 || text.indexOf("收费员") >= 0) {
-    return "manual";
-  }
-  if (text === "mixed" || text.indexOf("混合") >= 0 || text.indexOf("自动/人工") >= 0) {
-    return "mixed";
-  }
-  return "unknown";
-}
-
 function normalizeLadder(ladder) {
   if (!Array.isArray(ladder)) return [];
   return ladder.map((step) => ({
@@ -82,36 +66,6 @@ function normalizeLadder(ladder) {
     billingUnitMinutes: Math.max(1, toNumber(step && step.billingUnitMinutes, 60)),
     unitPrice: Math.max(0, toNumber(step && step.unitPrice, 0))
   }));
-}
-
-function normalizeTariffBoard(raw) {
-  const source = raw || {};
-  const board = {
-    city: textField(source, ["city"]),
-    lotCategory: textField(source, ["lotCategory", "category", "type"]),
-    pricingMethod: textField(source, ["pricingMethod", "priceMethod", "定价方式"]),
-    operatorName: textField(source, ["operatorName", "operator", "chargingUnit", "收费单位"]),
-    complaintPhone: textField(source, ["complaintPhone", "complaintTel", "phone", "投诉电话"])
-  };
-
-  const vehicleRows = Array.isArray(source.vehicleRows) ? source.vehicleRows : [];
-  if (vehicleRows.length) {
-    board.vehicleRows = vehicleRows.map((row) => ({
-      label: String(row.label || row.vehicleType || "").trim(),
-      temporaryText: String(row.temporaryText || row.temporary || "").trim(),
-      overnightPrice: Math.max(0, toNumber(row.overnightPrice, 0)),
-      monthlyPrice: Math.max(0, toNumber(row.monthlyPrice, 0)),
-      notes: String(row.notes || "").trim()
-    }));
-  }
-
-  Object.keys(board).forEach((key) => {
-    if (board[key] === "" || (Array.isArray(board[key]) && !board[key].length)) {
-      delete board[key];
-    }
-  });
-
-  return board;
 }
 
 function normalizePricingRule(raw, options) {
@@ -219,14 +173,8 @@ function normalizeRecognition(raw) {
   const access = source.access || {};
   const location = source.location || {};
   const normalizedPricing = normalizePricingRule(pricing);
-  const collectionMode = normalizeCollectionMode(pricing.collectionMode || source.collectionMode || access.collectionMode);
-  const tariffBoard = normalizeTariffBoard(pricing.tariffBoard || source.tariffBoard || {});
   const pricingByVehicle = normalizePricingByVehicle(pricing);
 
-  normalizedPricing.collectionMode = collectionMode;
-  if (Object.keys(tariffBoard).length) {
-    normalizedPricing.tariffBoard = tariffBoard;
-  }
   if (Object.keys(pricingByVehicle).length) {
     normalizedPricing.pricingByVehicle = pricingByVehicle;
   }
@@ -241,7 +189,6 @@ function normalizeRecognition(raw) {
       amapPoiId: String(location.amapPoiId || location.poiId || "").trim()
     },
     pricing: normalizedPricing,
-    collectionMode,
     availability: ["high", "medium", "low", "unknown"].indexOf(source.availability) >= 0
       ? source.availability
       : "unknown",
@@ -280,7 +227,6 @@ function inferPricingFromText(text) {
   const newEnergyFreeMinutes = newEnergyFreeHour == null
     ? extractFirstNumber(/新能源[\s\S]{0,12}?(\d+)\s*(?:分钟|分)[\s\S]{0,8}?(?:免费|内免费)/, source, null)
     : Math.round(newEnergyFreeHour * 60);
-  const complaintPhoneMatch = source.match(/(?:投诉电话|投诉|物价局)[^\d]*(\d[\d\s-]{3,})/);
 
   if (perEntry || flat24) {
     const flatPrice = perEntry
@@ -293,10 +239,6 @@ function inferPricingFromText(text) {
       flatPrice,
       flatRepeat: !perEntry,
       maxDailyPrice,
-      collectionMode: normalizeCollectionMode(source),
-      tariffBoard: {
-        complaintPhone: complaintPhoneMatch ? complaintPhoneMatch[1].replace(/\s+/g, "") : ""
-      },
       notes: source
     };
   }
@@ -309,10 +251,6 @@ function inferPricingFromText(text) {
     billingUnitMinutes: tempUnitMinutes || (halfHourPrice == null ? 60 : 30),
     unitPrice: tempUnitPrice == null ? (halfHourPrice == null ? (hourPrice || 0) : halfHourPrice) : tempUnitPrice,
     maxDailyPrice,
-    collectionMode: normalizeCollectionMode(source),
-    tariffBoard: {
-      complaintPhone: complaintPhoneMatch ? complaintPhoneMatch[1].replace(/\s+/g, "") : ""
-    },
     notes: source
   };
 

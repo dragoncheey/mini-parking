@@ -81,12 +81,6 @@
             <view class="picker-value">{{chargeTypeLabel}}</view>
           </picker>
         </view>
-        <view class="field">
-          <text class="field-label">收费方式</text>
-          <picker mode="selector" range="{{collectionModeOptions}}" range-key="label" value="{{collectionModeIndex}}" bindchange="onCollectionModeChange">
-            <view class="picker-value">{{collectionModeLabel}}</view>
-          </picker>
-        </view>
       </view>
       <view class="two-column">
         <view class="field">
@@ -176,26 +170,6 @@
             <textarea class="field-textarea compact-textarea" value="{{form.newEnergyNotes}}" data-key="newEnergyNotes" bindinput="onInput" placeholder="例如：新能源 2 小时免费，之后按停车场默认规则" />
           </view>
         </view>
-      </view>
-    </view>
-
-    <view class="form-section">
-      <text class="section-title">收费牌信息</text>
-      <view class="field">
-        <text class="field-label">定价方式</text>
-        <input class="field-input" value="{{form.pricingMethod}}" data-key="pricingMethod" bindinput="onInput" placeholder="例如：政府指导价" />
-      </view>
-      <view class="field">
-        <text class="field-label">收费单位</text>
-        <input class="field-input" value="{{form.operatorName}}" data-key="operatorName" bindinput="onInput" placeholder="物业/运营公司" />
-      </view>
-      <view class="field">
-        <text class="field-label">投诉电话</text>
-        <input class="field-input" value="{{form.complaintPhone}}" data-key="complaintPhone" bindinput="onInput" placeholder="例如：12358" />
-      </view>
-      <view class="field">
-        <text class="field-label">车型收费明细 JSON</text>
-        <textarea class="field-textarea compact-textarea mono-textarea" value="{{form.vehicleRowsJson}}" data-key="vehicleRowsJson" bindinput="onInput" placeholder='[{"label":"小车","temporaryText":"30分钟5元","overnightPrice":15,"monthlyPrice":180}]' />
       </view>
     </view>
 

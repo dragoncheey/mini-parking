@@ -177,7 +177,6 @@ const seedParkingLots = [
       flatRepeat: true,
       maxDailyPrice: 20,
       minCharge: 0,
-      collectionMode: "manual",
       notes: "24 小时 20 元，超过 24 小时重复计费。"
     }
   }
