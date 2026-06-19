@@ -219,6 +219,11 @@
   min-height: 112rpx;
 }
 
+.mono-textarea {
+  font-family: monospace;
+  font-size: 24rpx;
+}
+
 .vehicle-rule-box {
   margin-top: 22rpx;
   padding: 20rpx;
@@ -232,6 +237,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 20rpx;
+}
+
+.inline-switch {
+  margin-bottom: 18rpx;
+  padding: 18rpx 20rpx;
+  border: 1rpx solid #d9e2ea;
+  border-radius: 6rpx;
+  background: #f8fafc;
 }
 
 .switch-row > view {

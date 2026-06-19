@@ -1,8 +1,4 @@
 <view class="page vehicles-page">
-  <view class="vehicles-nav">
-    <text class="back-mark">‹</text>
-    <text class="nav-title">我的爱车</text>
-  </view>
 
   <view wx:if="{{loginRequired}}" class="login-panel">
     <text class="login-title">登录后管理车辆</text>
@@ -28,22 +24,18 @@
           wx:for="{{vehicles}}"
           wx:key="id"
           class="vehicle-card {{item.id === currentVehicleId ? 'is-current' : ''}} {{item.energyClass}}"
+          data-id="{{item.id}}"
+          bindtap="openEditPanel"
         >
           <view class="vehicle-card-head">
             <text class="plate-number">{{item.plateDisplay}}</text>
-            <button
-              class="settings-button"
-              data-id="{{item.id}}"
-              bindtap="openEditPanel"
-              aria-label="编辑车牌号"
-            >⚙</button>
           </view>
           <view class="vehicle-card-body">
             <text class="energy-badge">{{item.vehicleTypeLabel}}</text>
           </view>
           <view class="vehicle-actions">
-            <button class="secondary-button small-button" data-id="{{item.id}}" bindtap="useVehicle">设当前</button>
-            <button class="ghost-button small-button" data-id="{{item.id}}" bindtap="removeVehicle">删除</button>
+            <button class="secondary-button small-button" data-id="{{item.id}}" catchtap="useVehicle">设当前</button>
+            <button class="ghost-button small-button" data-id="{{item.id}}" catchtap="removeVehicle">删除</button>
           </view>
         </view>
       </view>

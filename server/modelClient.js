@@ -8,7 +8,12 @@ function buildUserPrompt(payload) {
   return [
     "请从停车场收费牌/入口照片和补充信息中识别停车场数据。",
     "只返回 JSON，不要解释。",
-    "JSON 字段：name, address, entrance, location{latitude,longitude,amapPoiId}, pricing{freeMinutes,billingUnitMinutes,unitPrice,maxDailyPrice,notes}, availability, walkingPenaltyMinutes, confidence, evidenceSummary, warnings。",
+    "JSON 字段：name, address, entrance, location{latitude,longitude,amapPoiId}, pricing, availability, walkingPenaltyMinutes, confidence, evidenceSummary, warnings。",
+    "pricing 字段结构：chargeType(hourly|flat|ladder), freeMinutes, billingUnitMinutes, unitPrice, maxDailyPrice, minCharge, flatDurationMinutes, flatPrice, flatRepeat, collectionMode(auto_gate|manual|mixed|unknown), notes。",
+    "pricing.pricingByVehicle 可包含 new_energy 和 fuel 覆盖规则；新能源与燃油车免费时长或价格不同必须分别写入，未识别到的字段不要编造。",
+    "pricing.tariffBoard 可包含 city, lotCategory, pricingMethod, operatorName, complaintPhone, vehicleRows[{label,temporaryText,overnightPrice,monthlyPrice,notes}]。",
+    "按次/包段停车场示例：24小时10元 -> chargeType=flat, flatDurationMinutes=1440, flatPrice=10, flatRepeat=true；一次性20元 -> chargeType=flat, flatDurationMinutes=1440, flatPrice=20, flatRepeat=false。",
+    "收费方式判断：看到自动闸机、进场取卡、离场读卡、扫码自助等写 auto_gate；人工收费、收费员写 manual；两者都有写 mixed。",
     "availability 只能是 high, medium, low, unknown。",
     "如果照片内容无法直接读取，请根据当前表单和补充文字生成低可信度草稿，并在 warnings 中提示人工复核。",
     `照片数量：${photos.length}`,

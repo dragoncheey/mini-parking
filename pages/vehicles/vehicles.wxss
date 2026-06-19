@@ -4,29 +4,6 @@
   background: #f5f7f9;
 }
 
-.vehicles-nav {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 92rpx;
-}
-
-.back-mark {
-  position: absolute;
-  left: 0;
-  top: 12rpx;
-  color: #18212f;
-  font-size: 68rpx;
-  line-height: 1;
-}
-
-.nav-title {
-  color: #111827;
-  font-size: 36rpx;
-  font-weight: 900;
-}
-
 .login-panel,
 .current-card,
 .vehicle-card {
@@ -104,9 +81,8 @@
 
 .vehicle-card {
   position: relative;
-  min-height: 260rpx;
   margin-top: 18rpx;
-  padding: 32rpx;
+  padding: 24rpx 32rpx;
   overflow: hidden;
   background: linear-gradient(135deg, #ffffff 0%, #eef8f5 100%);
 }
@@ -134,7 +110,6 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 18rpx;
 }
 
@@ -145,35 +120,13 @@
   line-height: 1.2;
 }
 
-.settings-button {
-  flex: 0 0 56rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56rpx;
-  height: 56rpx;
-  min-height: 56rpx;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: #273140;
-  background: transparent;
-  font-size: 34rpx;
-  line-height: 1;
-}
-
-.settings-button::after {
-  border: 0;
-}
-
 .vehicle-card-body {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
   gap: 12rpx;
-  margin-top: 118rpx;
+  margin-top: 14rpx;
 }
 
 .energy-badge {
@@ -198,12 +151,12 @@
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12rpx;
-  margin-top: 22rpx;
+  gap: 10rpx;
+  margin-top: 16rpx;
 }
 
 .small-button {
-  min-height: 58rpx;
+  min-height: 52rpx;
   padding: 0 12rpx;
   font-size: 23rpx;
 }

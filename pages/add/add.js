@@ -19,6 +19,19 @@ const availabilityOptions = [
   { label: "待确认", value: "unknown" }
 ];
 
+const chargeTypeOptions = [
+  { label: "按时计费", value: "hourly" },
+  { label: "按次/包段", value: "flat" },
+  { label: "阶梯计费", value: "ladder" }
+];
+
+const collectionModeOptions = [
+  { label: "自动闸机/自助", value: "auto_gate" },
+  { label: "人工收费", value: "manual" },
+  { label: "自动+人工", value: "mixed" },
+  { label: "待确认", value: "unknown" }
+];
+
 function numberFromForm(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -30,6 +43,11 @@ function textValue(value) {
 
 function optionalTextValue(value) {
   return value == null ? "" : `${value}`;
+}
+
+function optionIndex(options, value, fallbackIndex) {
+  const index = options.findIndex((item) => item.value === value);
+  return index >= 0 ? index : fallbackIndex;
 }
 
 function inferMediaType(path) {
@@ -47,10 +65,16 @@ function buildEmptyForm() {
   return {
     name: "", address: "", entrance: "",
     latitude: "", longitude: "", amapPoiId: "",
-    freeMinutes: "60", billingUnitMinutes: "60", unitPrice: "5", maxDailyPrice: "", notes: "",
+    chargeType: "hourly",
+    freeMinutes: "60", billingUnitMinutes: "60", unitPrice: "5", maxDailyPrice: "", minCharge: "", notes: "",
+    flatDurationMinutes: "1440", flatPrice: "", flatRepeat: true,
+    ladderJson: "",
     newEnergyEnabled: false,
     newEnergyFreeMinutes: "120", newEnergyBillingUnitMinutes: "",
-    newEnergyUnitPrice: "", newEnergyMaxDailyPrice: "", newEnergyNotes: "",
+    newEnergyUnitPrice: "", newEnergyMaxDailyPrice: "",
+    newEnergyFlatDurationMinutes: "", newEnergyFlatPrice: "", newEnergyNotes: "",
+    collectionMode: "unknown",
+    pricingMethod: "", operatorName: "", complaintPhone: "", vehicleRowsJson: "",
     walkingPenaltyMinutes: "0"
   };
 }
@@ -62,6 +86,7 @@ function formFromLot(lot) {
   const pricingByVehicle = pricing.pricingByVehicle || {};
   const newEnergyRule = pricingByVehicle.new_energy || null;
   const access = lot.access || {};
+  const tariffBoard = pricing.tariffBoard || {};
 
   return {
     name: textValue(lot.name),
@@ -70,17 +95,32 @@ function formFromLot(lot) {
     latitude: textValue(location.latitude),
     longitude: textValue(location.longitude),
     amapPoiId: textValue(amap.poiId),
+    chargeType: textValue(pricing.chargeType || "hourly"),
     freeMinutes: textValue(pricing.freeMinutes || 0),
     billingUnitMinutes: textValue(pricing.billingUnitMinutes || 60),
     unitPrice: textValue(pricing.unitPrice || 0),
     maxDailyPrice: pricing.maxDailyPrice ? textValue(pricing.maxDailyPrice) : "",
+    minCharge: pricing.minCharge ? textValue(pricing.minCharge) : "",
+    flatDurationMinutes: textValue(pricing.flatDurationMinutes || 1440),
+    flatPrice: pricing.flatPrice ? textValue(pricing.flatPrice) : "",
+    flatRepeat: pricing.flatRepeat !== false,
+    ladderJson: Array.isArray(pricing.ladder) && pricing.ladder.length ? JSON.stringify(pricing.ladder, null, 2) : "",
     notes: textValue(pricing.notes),
     newEnergyEnabled: Boolean(newEnergyRule),
     newEnergyFreeMinutes: newEnergyRule ? textValue(newEnergyRule.freeMinutes || 0) : "120",
     newEnergyBillingUnitMinutes: newEnergyRule ? optionalTextValue(newEnergyRule.billingUnitMinutes) : "",
     newEnergyUnitPrice: newEnergyRule ? optionalTextValue(newEnergyRule.unitPrice) : "",
     newEnergyMaxDailyPrice: newEnergyRule ? optionalTextValue(newEnergyRule.maxDailyPrice) : "",
+    newEnergyFlatDurationMinutes: newEnergyRule ? optionalTextValue(newEnergyRule.flatDurationMinutes) : "",
+    newEnergyFlatPrice: newEnergyRule ? optionalTextValue(newEnergyRule.flatPrice) : "",
     newEnergyNotes: newEnergyRule ? textValue(newEnergyRule.notes) : "",
+    collectionMode: textValue(pricing.collectionMode || "unknown"),
+    pricingMethod: textValue(tariffBoard.pricingMethod),
+    operatorName: textValue(tariffBoard.operatorName),
+    complaintPhone: textValue(tariffBoard.complaintPhone),
+    vehicleRowsJson: Array.isArray(tariffBoard.vehicleRows) && tariffBoard.vehicleRows.length
+      ? JSON.stringify(tariffBoard.vehicleRows, null, 2)
+      : "",
     walkingPenaltyMinutes: textValue(access.walkingPenaltyMinutes || 0)
   };
 }
@@ -90,6 +130,14 @@ Page({
     availabilityOptions,
     availabilityIndex: 1,
     availabilityLabel: availabilityOptions[1].label,
+    chargeTypeOptions,
+    chargeTypeIndex: 0,
+    chargeTypeLabel: chargeTypeOptions[0].label,
+    isFlatChargeType: false,
+    isLadderChargeType: false,
+    collectionModeOptions,
+    collectionModeIndex: 3,
+    collectionModeLabel: collectionModeOptions[3].label,
     isLoggedIn: false,
     loginRequired: true,
     isEditing: false,
@@ -145,6 +193,12 @@ Page({
       saveButtonText: "保存并参与推荐",
       availabilityIndex: 1,
       availabilityLabel: availabilityOptions[1].label,
+      chargeTypeIndex: 0,
+      chargeTypeLabel: chargeTypeOptions[0].label,
+      isFlatChargeType: false,
+      isLadderChargeType: false,
+      collectionModeIndex: 3,
+      collectionModeLabel: collectionModeOptions[3].label,
       evidencePhotos: [],
       photoCount: 0,
       recognitionStatus: "未采集照片",
@@ -252,6 +306,10 @@ Page({
     const photos = Array.isArray(evidence.photos) ? evidence.photos : [];
     const warnings = Array.isArray(evidence.recognitionWarnings) ? evidence.recognitionWarnings : [];
 
+    const form = formFromLot(lot);
+    const chargeTypeIndex = optionIndex(chargeTypeOptions, form.chargeType, 0);
+    const collectionModeIndex = optionIndex(collectionModeOptions, form.collectionMode, 3);
+
     this.setData({
       isEditing: true,
       editId,
@@ -260,6 +318,12 @@ Page({
       saveButtonText: "保存修改",
       availabilityIndex,
       availabilityLabel: availabilityOptions[availabilityIndex].label,
+      chargeTypeIndex,
+      chargeTypeLabel: chargeTypeOptions[chargeTypeIndex].label,
+      isFlatChargeType: form.chargeType === "flat",
+      isLadderChargeType: form.chargeType === "ladder",
+      collectionModeIndex,
+      collectionModeLabel: collectionModeOptions[collectionModeIndex].label,
       evidencePhotos: photos,
       photoCount: photos.length,
       recognitionStatus: evidence.recognitionStatus || (photos.length ? "已采集，待复核" : "未采集照片"),
@@ -270,7 +334,7 @@ Page({
       recognitionWarningText: warnings.join("；"),
       canRecognize: photos.length > 0,
       recognizeDisabled: photos.length <= 0,
-      form: formFromLot(lot)
+      form
     });
   },
 
@@ -287,6 +351,28 @@ Page({
   onAvailabilityChange(event) {
     const availabilityIndex = Number(event.detail.value);
     this.setData({ availabilityIndex, availabilityLabel: availabilityOptions[availabilityIndex].label });
+  },
+
+  onChargeTypeChange(event) {
+    const chargeTypeIndex = Number(event.detail.value);
+    const option = chargeTypeOptions[chargeTypeIndex] || chargeTypeOptions[0];
+    this.setData({
+      chargeTypeIndex,
+      chargeTypeLabel: option.label,
+      isFlatChargeType: option.value === "flat",
+      isLadderChargeType: option.value === "ladder",
+      "form.chargeType": option.value
+    });
+  },
+
+  onCollectionModeChange(event) {
+    const collectionModeIndex = Number(event.detail.value);
+    const option = collectionModeOptions[collectionModeIndex] || collectionModeOptions[3];
+    this.setData({
+      collectionModeIndex,
+      collectionModeLabel: option.label,
+      "form.collectionMode": option.value
+    });
   },
 
   useCurrentLocation() {
@@ -406,15 +492,33 @@ Page({
     const result = recognition || {};
     const pricing = result.pricing || {};
     const location = result.location || {};
+    const pricingByVehicle = pricing.pricingByVehicle || {};
+    const newEnergyRule = pricingByVehicle.new_energy || null;
+    const tariffBoard = pricing.tariffBoard || {};
     const warnings = Array.isArray(result.warnings) ? result.warnings : [];
     const updates = {
       "form.name": result.name || this.data.form.name,
       "form.address": result.address || this.data.form.address,
       "form.entrance": result.entrance || this.data.form.entrance,
+      "form.chargeType": pricing.chargeType || this.data.form.chargeType,
       "form.freeMinutes": `${pricing.freeMinutes == null ? this.data.form.freeMinutes : pricing.freeMinutes}`,
       "form.billingUnitMinutes": `${pricing.billingUnitMinutes == null ? this.data.form.billingUnitMinutes : pricing.billingUnitMinutes}`,
       "form.unitPrice": `${pricing.unitPrice == null ? this.data.form.unitPrice : pricing.unitPrice}`,
       "form.maxDailyPrice": pricing.maxDailyPrice ? `${pricing.maxDailyPrice}` : this.data.form.maxDailyPrice,
+      "form.minCharge": pricing.minCharge ? `${pricing.minCharge}` : this.data.form.minCharge,
+      "form.flatDurationMinutes": `${pricing.flatDurationMinutes == null ? this.data.form.flatDurationMinutes : pricing.flatDurationMinutes}`,
+      "form.flatPrice": pricing.flatPrice ? `${pricing.flatPrice}` : this.data.form.flatPrice,
+      "form.flatRepeat": pricing.flatRepeat == null ? this.data.form.flatRepeat : Boolean(pricing.flatRepeat),
+      "form.ladderJson": Array.isArray(pricing.ladder) && pricing.ladder.length
+        ? JSON.stringify(pricing.ladder, null, 2)
+        : this.data.form.ladderJson,
+      "form.collectionMode": pricing.collectionMode || result.collectionMode || this.data.form.collectionMode,
+      "form.pricingMethod": tariffBoard.pricingMethod || this.data.form.pricingMethod,
+      "form.operatorName": tariffBoard.operatorName || this.data.form.operatorName,
+      "form.complaintPhone": tariffBoard.complaintPhone || this.data.form.complaintPhone,
+      "form.vehicleRowsJson": Array.isArray(tariffBoard.vehicleRows) && tariffBoard.vehicleRows.length
+        ? JSON.stringify(tariffBoard.vehicleRows, null, 2)
+        : this.data.form.vehicleRowsJson,
       "form.notes": pricing.notes || this.data.form.notes,
       "form.walkingPenaltyMinutes": `${result.walkingPenaltyMinutes == null ? this.data.form.walkingPenaltyMinutes : result.walkingPenaltyMinutes}`,
       recognitionWarnings: warnings,
@@ -426,6 +530,32 @@ Page({
     if (location.latitude != null) updates["form.latitude"] = `${location.latitude}`;
     if (location.longitude != null) updates["form.longitude"] = `${location.longitude}`;
     if (location.amapPoiId) updates["form.amapPoiId"] = location.amapPoiId;
+
+    if (pricing.chargeType) {
+      const index = optionIndex(chargeTypeOptions, pricing.chargeType, 0);
+      updates.chargeTypeIndex = index;
+      updates.chargeTypeLabel = chargeTypeOptions[index].label;
+      updates.isFlatChargeType = pricing.chargeType === "flat";
+      updates.isLadderChargeType = pricing.chargeType === "ladder";
+    }
+
+    const collectionMode = pricing.collectionMode || result.collectionMode;
+    if (collectionMode) {
+      const index = optionIndex(collectionModeOptions, collectionMode, 3);
+      updates.collectionModeIndex = index;
+      updates.collectionModeLabel = collectionModeOptions[index].label;
+    }
+
+    if (newEnergyRule) {
+      updates["form.newEnergyEnabled"] = true;
+      updates["form.newEnergyFreeMinutes"] = `${newEnergyRule.freeMinutes == null ? this.data.form.newEnergyFreeMinutes : newEnergyRule.freeMinutes}`;
+      updates["form.newEnergyBillingUnitMinutes"] = newEnergyRule.billingUnitMinutes == null ? this.data.form.newEnergyBillingUnitMinutes : `${newEnergyRule.billingUnitMinutes}`;
+      updates["form.newEnergyUnitPrice"] = newEnergyRule.unitPrice == null ? this.data.form.newEnergyUnitPrice : `${newEnergyRule.unitPrice}`;
+      updates["form.newEnergyMaxDailyPrice"] = newEnergyRule.maxDailyPrice == null ? this.data.form.newEnergyMaxDailyPrice : `${newEnergyRule.maxDailyPrice}`;
+      updates["form.newEnergyFlatDurationMinutes"] = newEnergyRule.flatDurationMinutes == null ? this.data.form.newEnergyFlatDurationMinutes : `${newEnergyRule.flatDurationMinutes}`;
+      updates["form.newEnergyFlatPrice"] = newEnergyRule.flatPrice == null ? this.data.form.newEnergyFlatPrice : `${newEnergyRule.flatPrice}`;
+      updates["form.newEnergyNotes"] = newEnergyRule.notes || this.data.form.newEnergyNotes;
+    }
 
     if (result.availability) {
       const index = availabilityOptions.findIndex((item) => item.value === result.availability);
@@ -483,8 +613,29 @@ Page({
     if (!Number.isFinite(Number(form.latitude)) || !Number.isFinite(Number(form.longitude))) {
       return "请填写有效坐标";
     }
-    if (numberFromForm(form.billingUnitMinutes, 0) <= 0) return "计费单位必须大于 0";
-    if (numberFromForm(form.unitPrice, -1) < 0) return "价格不能为负数";
+    if (form.chargeType === "flat") {
+      if (numberFromForm(form.flatDurationMinutes, 0) <= 0) return "按次/包段时长必须大于 0";
+      if (numberFromForm(form.flatPrice, -1) < 0) return "按次/包段价格不能为负数";
+    } else if (form.chargeType === "ladder") {
+      if (!form.ladderJson.trim()) return "请填写阶梯计费明细";
+      try {
+        const ladder = JSON.parse(form.ladderJson);
+        if (!Array.isArray(ladder) || !ladder.length) return "阶梯计费明细必须是数组";
+      } catch (error) {
+        return "阶梯计费明细必须是合法 JSON";
+      }
+    } else {
+      if (numberFromForm(form.billingUnitMinutes, 0) <= 0) return "计费单位必须大于 0";
+      if (numberFromForm(form.unitPrice, -1) < 0) return "价格不能为负数";
+    }
+    if (form.vehicleRowsJson.trim()) {
+      try {
+        const vehicleRows = JSON.parse(form.vehicleRowsJson);
+        if (!Array.isArray(vehicleRows)) return "车型收费明细必须是数组";
+      } catch (error) {
+        return "车型收费明细必须是合法 JSON";
+      }
+    }
     return "";
   },
 
@@ -492,13 +643,38 @@ Page({
     const form = this.data.form;
     const availability = availabilityOptions[this.data.availabilityIndex].value;
     const basePricing = {
+      chargeType: form.chargeType || "hourly",
       freeMinutes: numberFromForm(form.freeMinutes, 0),
-      billingUnitMinutes: numberFromForm(form.billingUnitMinutes, 60),
-      unitPrice: numberFromForm(form.unitPrice, 0),
       maxDailyPrice: numberFromForm(form.maxDailyPrice, 0),
-      minCharge: 0,
-      notes: form.notes.trim()
+      minCharge: numberFromForm(form.minCharge, 0),
+      collectionMode: form.collectionMode || "unknown",
+      notes: form.notes.trim(),
+      tariffBoard: {
+        pricingMethod: form.pricingMethod.trim(),
+        operatorName: form.operatorName.trim(),
+        complaintPhone: form.complaintPhone.trim()
+      }
     };
+
+    if (basePricing.chargeType === "flat") {
+      basePricing.flatDurationMinutes = numberFromForm(form.flatDurationMinutes, 1440);
+      basePricing.flatPrice = numberFromForm(form.flatPrice, 0);
+      basePricing.flatRepeat = Boolean(form.flatRepeat);
+    } else if (basePricing.chargeType === "ladder") {
+      basePricing.ladder = JSON.parse(form.ladderJson);
+    } else {
+      basePricing.billingUnitMinutes = numberFromForm(form.billingUnitMinutes, 60);
+      basePricing.unitPrice = numberFromForm(form.unitPrice, 0);
+    }
+
+    if (!basePricing.tariffBoard.pricingMethod
+      && !basePricing.tariffBoard.operatorName
+      && !basePricing.tariffBoard.complaintPhone
+      && !form.vehicleRowsJson.trim()) {
+      delete basePricing.tariffBoard;
+    } else if (form.vehicleRowsJson.trim()) {
+      basePricing.tariffBoard.vehicleRows = JSON.parse(form.vehicleRowsJson);
+    }
 
     if (form.newEnergyEnabled) {
       const newEnergyFreeMinutes = numberFromForm(form.newEnergyFreeMinutes, 120);
@@ -519,6 +695,14 @@ Page({
       if (form.newEnergyMaxDailyPrice.trim()) {
         basePricing.pricingByVehicle.new_energy.maxDailyPrice =
           numberFromForm(form.newEnergyMaxDailyPrice, basePricing.maxDailyPrice);
+      }
+      if (form.newEnergyFlatDurationMinutes.trim()) {
+        basePricing.pricingByVehicle.new_energy.flatDurationMinutes =
+          numberFromForm(form.newEnergyFlatDurationMinutes, basePricing.flatDurationMinutes || 1440);
+      }
+      if (form.newEnergyFlatPrice.trim()) {
+        basePricing.pricingByVehicle.new_energy.flatPrice =
+          numberFromForm(form.newEnergyFlatPrice, basePricing.flatPrice || 0);
       }
     }
 

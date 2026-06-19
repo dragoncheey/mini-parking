@@ -7,6 +7,19 @@ function roundMoney(value) {
   return Math.round(value * 100) / 100;
 }
 
+function applyMaxDailyCap(baseFee, durationMinutes, rule) {
+  const maxDailyPrice = normalizeNumber(rule.maxDailyPrice, 0);
+  if (maxDailyPrice <= 0) {
+    return baseFee;
+  }
+
+  const capPeriodMinutes = rule.chargeType === "flat"
+    ? Math.max(1, normalizeNumber(rule.flatDurationMinutes || rule.packageMinutes, 1440))
+    : 1440;
+  const capPeriods = Math.max(1, Math.ceil(Math.max(1, durationMinutes) / capPeriodMinutes));
+  return Math.min(baseFee, maxDailyPrice * capPeriods);
+}
+
 function calculateSimpleFee(durationMinutes, pricing) {
   const freeMinutes = normalizeNumber(pricing.freeMinutes, 0);
   const billingUnitMinutes = Math.max(1, normalizeNumber(pricing.billingUnitMinutes, 60));
@@ -20,6 +33,26 @@ function calculateSimpleFee(durationMinutes, pricing) {
   const units = Math.ceil(billableMinutes / billingUnitMinutes);
   const rawFee = units * unitPrice;
   return Math.max(rawFee, normalizeNumber(pricing.minCharge, 0));
+}
+
+function calculateFlatFee(durationMinutes, pricing) {
+  const freeMinutes = normalizeNumber(pricing.freeMinutes, 0);
+  const flatDurationMinutes = Math.max(1, normalizeNumber(
+    pricing.flatDurationMinutes || pricing.packageMinutes,
+    1440
+  ));
+  const flatPrice = Math.max(0, normalizeNumber(
+    pricing.flatPrice != null ? pricing.flatPrice : pricing.packagePrice,
+    0
+  ));
+  const billableMinutes = Math.max(0, durationMinutes - freeMinutes);
+  const repeats = pricing.flatRepeat === false ? 1 : Math.max(1, Math.ceil(billableMinutes / flatDurationMinutes));
+
+  if (billableMinutes <= 0) {
+    return 0;
+  }
+
+  return Math.max(repeats * flatPrice, normalizeNumber(pricing.minCharge, 0));
 }
 
 function calculateLadderFee(durationMinutes, pricing) {
@@ -61,11 +94,17 @@ function calculateLadderFee(durationMinutes, pricing) {
 function calculateParkingFee(durationMinutes, pricing) {
   const safeDuration = Math.max(0, normalizeNumber(durationMinutes, 0));
   const rule = resolvePricingForVehicle(pricing, null);
-  const baseFee = Array.isArray(rule.ladder) && rule.ladder.length > 0
-    ? calculateLadderFee(safeDuration, rule)
-    : calculateSimpleFee(safeDuration, rule);
-  const maxDailyPrice = normalizeNumber(rule.maxDailyPrice, 0);
-  const cappedFee = maxDailyPrice > 0 ? Math.min(baseFee, maxDailyPrice) : baseFee;
+  let baseFee;
+
+  if (rule.chargeType === "flat") {
+    baseFee = calculateFlatFee(safeDuration, rule);
+  } else if (Array.isArray(rule.ladder) && rule.ladder.length > 0) {
+    baseFee = calculateLadderFee(safeDuration, rule);
+  } else {
+    baseFee = calculateSimpleFee(safeDuration, rule);
+  }
+
+  const cappedFee = applyMaxDailyCap(baseFee, safeDuration, rule);
 
   return roundMoney(cappedFee);
 }
@@ -76,7 +115,9 @@ function mergePricingRule(baseRule, overrideRule) {
   return {
     ...base,
     ...override,
-    ladder: override.ladder || base.ladder
+    ladder: override.ladder || base.ladder,
+    pricingByVehicle: base.pricingByVehicle,
+    flatRepeat: override.flatRepeat == null ? base.flatRepeat : override.flatRepeat
   };
 }
 
@@ -140,6 +181,15 @@ function describePricing(pricing) {
 function describePricingRule(rule) {
   if (rule.notes) {
     return rule.notes;
+  }
+
+  if (rule.chargeType === "flat") {
+    const freeMinutes = normalizeNumber(rule.freeMinutes, 0);
+    const flatDurationMinutes = normalizeNumber(rule.flatDurationMinutes || rule.packageMinutes, 1440);
+    const flatPrice = normalizeNumber(rule.flatPrice != null ? rule.flatPrice : rule.packagePrice, 0);
+    const freeText = freeMinutes > 0 ? `${formatDuration(freeMinutes)}免费，` : "";
+    const repeatText = rule.flatRepeat === false ? "按次" : `每${formatDuration(flatDurationMinutes)}`;
+    return `${freeText}${repeatText}${flatPrice}元`;
   }
 
   if (Array.isArray(rule.ladder) && rule.ladder.length > 0) {

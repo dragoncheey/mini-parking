@@ -30,18 +30,6 @@ const recommendationModes = [
   { value: "price", label: "均价最低" }
 ];
 
-const parkingScopeOptions = [
-  { value: "all", label: "全部" },
-  { value: "street", label: "路内" },
-  { value: "offstreet", label: "路外" }
-];
-
-const PARKING_SCOPE_TEXT = {
-  all: "全部",
-  street: "路内",
-  offstreet: "路外"
-};
-
 const AVAILABILITY_PRIORITY = {
   high: 0,
   medium: 1,
@@ -163,9 +151,7 @@ Page({
     accountStatusClass: "is-guest",
     recommendationModes,
     recommendationMode: "distance",
-    parkingScopeOptions,
     parkingScope: "all",
-    parkingScopeText: PARKING_SCOPE_TEXT.all,
     sheetExpanded: false,
     sheetAnimating: false,
     sheetHeightPx: SHEET_COLLAPSED_HEIGHT,
@@ -620,16 +606,6 @@ Page({
     const mode = event.currentTarget.dataset.mode;
     if (!mode || mode === this.data.recommendationMode) return;
     this.setData({ recommendationMode: mode });
-    this.refreshRecommendations();
-  },
-
-  setParkingScope(event) {
-    const scope = event.currentTarget.dataset.scope || "all";
-    if (scope === this.data.parkingScope) return;
-    this.setData({
-      parkingScope: scope,
-      parkingScopeText: PARKING_SCOPE_TEXT[scope] || PARKING_SCOPE_TEXT.all
-    });
     this.refreshRecommendations();
   },
 

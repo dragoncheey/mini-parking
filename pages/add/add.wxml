@@ -73,12 +73,48 @@
     </view>
 
     <view class="form-section">
-      <text class="section-title">默认/燃油车收费规则</text>
+      <text class="section-title">收费规则</text>
+      <view class="two-column">
+        <view class="field">
+          <text class="field-label">收费类型</text>
+          <picker mode="selector" range="{{chargeTypeOptions}}" range-key="label" value="{{chargeTypeIndex}}" bindchange="onChargeTypeChange">
+            <view class="picker-value">{{chargeTypeLabel}}</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="field-label">收费方式</text>
+          <picker mode="selector" range="{{collectionModeOptions}}" range-key="label" value="{{collectionModeIndex}}" bindchange="onCollectionModeChange">
+            <view class="picker-value">{{collectionModeLabel}}</view>
+          </picker>
+        </view>
+      </view>
       <view class="two-column">
         <view class="field">
           <text class="field-label">免费分钟</text>
           <input class="field-input" type="number" value="{{form.freeMinutes}}" data-key="freeMinutes" bindinput="onInput" />
         </view>
+        <view class="field">
+          <text class="field-label">单日封顶</text>
+          <input class="field-input" type="digit" value="{{form.maxDailyPrice}}" data-key="maxDailyPrice" bindinput="onInput" placeholder="可选" />
+        </view>
+      </view>
+      <view wx:if="{{isFlatChargeType}}" class="two-column">
+        <view class="field">
+          <text class="field-label">包段分钟</text>
+          <input class="field-input" type="number" value="{{form.flatDurationMinutes}}" data-key="flatDurationMinutes" bindinput="onInput" />
+        </view>
+        <view class="field">
+          <text class="field-label">包段价格</text>
+          <input class="field-input" type="digit" value="{{form.flatPrice}}" data-key="flatPrice" bindinput="onInput" />
+        </view>
+      </view>
+      <view wx:if="{{isFlatChargeType}}" class="switch-row inline-switch">
+        <view>
+          <text class="field-label">超出后重复计费</text>
+        </view>
+        <switch checked="{{form.flatRepeat}}" data-key="flatRepeat" bindchange="onSwitchChange" color="#166a5b" />
+      </view>
+      <view wx:elif="{{!isLadderChargeType}}" class="two-column">
         <view class="field">
           <text class="field-label">计费单位分钟</text>
           <input class="field-input" type="number" value="{{form.billingUnitMinutes}}" data-key="billingUnitMinutes" bindinput="onInput" />
@@ -87,10 +123,14 @@
           <text class="field-label">每单位价格</text>
           <input class="field-input" type="digit" value="{{form.unitPrice}}" data-key="unitPrice" bindinput="onInput" />
         </view>
-        <view class="field">
-          <text class="field-label">单日封顶</text>
-          <input class="field-input" type="digit" value="{{form.maxDailyPrice}}" data-key="maxDailyPrice" bindinput="onInput" placeholder="可选" />
-        </view>
+      </view>
+      <view wx:if="{{isLadderChargeType}}" class="field">
+        <text class="field-label">阶梯明细 JSON</text>
+        <textarea class="field-textarea compact-textarea mono-textarea" value="{{form.ladderJson}}" data-key="ladderJson" bindinput="onInput" placeholder='[{"untilMinutes":120,"billingUnitMinutes":30,"unitPrice":4}]' />
+      </view>
+      <view class="field">
+        <text class="field-label">最低收费</text>
+        <input class="field-input" type="digit" value="{{form.minCharge}}" data-key="minCharge" bindinput="onInput" placeholder="可选" />
       </view>
       <view class="field">
         <text class="field-label">规则备注</text>
@@ -122,12 +162,40 @@
               <text class="field-label">新能源单日封顶</text>
               <input class="field-input" type="digit" value="{{form.newEnergyMaxDailyPrice}}" data-key="newEnergyMaxDailyPrice" bindinput="onInput" placeholder="默认同燃油车" />
             </view>
+            <view class="field" wx:if="{{isFlatChargeType}}">
+              <text class="field-label">新能源包段分钟</text>
+              <input class="field-input" type="number" value="{{form.newEnergyFlatDurationMinutes}}" data-key="newEnergyFlatDurationMinutes" bindinput="onInput" placeholder="默认同燃油车" />
+            </view>
+            <view class="field" wx:if="{{isFlatChargeType}}">
+              <text class="field-label">新能源包段价格</text>
+              <input class="field-input" type="digit" value="{{form.newEnergyFlatPrice}}" data-key="newEnergyFlatPrice" bindinput="onInput" placeholder="默认同燃油车" />
+            </view>
           </view>
           <view class="field">
             <text class="field-label">新能源备注</text>
             <textarea class="field-textarea compact-textarea" value="{{form.newEnergyNotes}}" data-key="newEnergyNotes" bindinput="onInput" placeholder="例如：新能源 2 小时免费，之后按停车场默认规则" />
           </view>
         </view>
+      </view>
+    </view>
+
+    <view class="form-section">
+      <text class="section-title">收费牌信息</text>
+      <view class="field">
+        <text class="field-label">定价方式</text>
+        <input class="field-input" value="{{form.pricingMethod}}" data-key="pricingMethod" bindinput="onInput" placeholder="例如：政府指导价" />
+      </view>
+      <view class="field">
+        <text class="field-label">收费单位</text>
+        <input class="field-input" value="{{form.operatorName}}" data-key="operatorName" bindinput="onInput" placeholder="物业/运营公司" />
+      </view>
+      <view class="field">
+        <text class="field-label">投诉电话</text>
+        <input class="field-input" value="{{form.complaintPhone}}" data-key="complaintPhone" bindinput="onInput" placeholder="例如：12358" />
+      </view>
+      <view class="field">
+        <text class="field-label">车型收费明细 JSON</text>
+        <textarea class="field-textarea compact-textarea mono-textarea" value="{{form.vehicleRowsJson}}" data-key="vehicleRowsJson" bindinput="onInput" placeholder='[{"label":"小车","temporaryText":"30分钟5元","overnightPrice":15,"monthlyPrice":180}]' />
       </view>
     </view>
 

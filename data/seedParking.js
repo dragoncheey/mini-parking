@@ -23,6 +23,7 @@ const seedParkingLots = [
       tags: ["商场", "室内", "入口好找"]
     },
     pricing: {
+      chargeType: "hourly",
       freeMinutes: 60,
       billingUnitMinutes: 60,
       unitPrice: 5,
@@ -55,6 +56,7 @@ const seedParkingLots = [
       tags: ["近", "车位较稳"]
     },
     pricing: {
+      chargeType: "hourly",
       freeMinutes: 30,
       billingUnitMinutes: 30,
       unitPrice: 3,
@@ -93,6 +95,7 @@ const seedParkingLots = [
       tags: ["露天", "可能满位"]
     },
     pricing: {
+      chargeType: "hourly",
       freeMinutes: 0,
       billingUnitMinutes: 60,
       unitPrice: 4,
@@ -125,6 +128,7 @@ const seedParkingLots = [
       tags: ["室内", "高峰拥堵"]
     },
     pricing: {
+      chargeType: "ladder",
       freeMinutes: 15,
       maxDailyPrice: 60,
       ladder: [
@@ -140,6 +144,41 @@ const seedParkingLots = [
         }
       ],
       notes: "15 分钟内免费，前 2 小时每半小时 4 元，之后每小时 6 元。"
+    }
+  },
+  {
+    id: "park-flat-24h",
+    name: "会展中心临时停车场",
+    address: "示例市会展路 2 号",
+    source: "manual",
+    updatedAt: "2026-06-10",
+    confidence: 72,
+    availability: "medium",
+    distanceHintMeters: 540,
+    location: {
+      latitude: 31.23148,
+      longitude: 121.4688,
+      amap: {
+        poiId: "B0FFEXAMPLE05",
+        cityCode: "021",
+        name: "会展中心临时停车场"
+      }
+    },
+    access: {
+      entrance: "北侧临时入口，活动日排队",
+      walkingPenaltyMinutes: 1,
+      tags: ["露天", "按次"]
+    },
+    pricing: {
+      chargeType: "flat",
+      freeMinutes: 0,
+      flatDurationMinutes: 1440,
+      flatPrice: 20,
+      flatRepeat: true,
+      maxDailyPrice: 20,
+      minCharge: 0,
+      collectionMode: "manual",
+      notes: "24 小时 20 元，超过 24 小时重复计费。"
     }
   }
 ];

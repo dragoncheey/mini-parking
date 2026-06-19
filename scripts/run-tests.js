@@ -33,6 +33,14 @@ function testPricing() {
   assert.strictEqual(calculateParkingFeeForVehicle(60, seedParkingLots[1].pricing, "new_energy"), 0);
   assert.strictEqual(calculateParkingFeeForVehicle(60, seedParkingLots[1].pricing, "fuel"), 3);
   assert.strictEqual(calculateParkingFee(180, seedParkingLots[3].pricing), 22);
+  assert.strictEqual(calculateParkingFee(180, seedParkingLots[4].pricing), 20);
+  assert.strictEqual(calculateParkingFee(1500, seedParkingLots[4].pricing), 40);
+  assert.strictEqual(calculateParkingFee(180, {
+    chargeType: "flat",
+    flatDurationMinutes: 1440,
+    flatPrice: 10,
+    flatRepeat: false
+  }), 10);
 }
 
 function testRecommendation() {
@@ -93,9 +101,61 @@ function testRecognitionParsing() {
   assert.strictEqual(normalized.name, "测试停车场");
   assert.strictEqual(normalized.pricing.freeMinutes, 30);
   assert.strictEqual(mock.pricing.freeMinutes, 60);
+  assert.strictEqual(mock.pricing.chargeType, "hourly");
   assert.strictEqual(mock.pricing.billingUnitMinutes, 60);
   assert.strictEqual(mock.pricing.unitPrice, 5);
   assert.strictEqual(mock.pricing.maxDailyPrice, 40);
+
+  const tariffBoard = normalizeRecognition({
+    name: "Xx小区停车场",
+    pricing: {
+      chargeType: "hourly",
+      freeMinutes: 30,
+      billingUnitMinutes: 30,
+      unitPrice: 5,
+      maxDailyPrice: 15,
+      collectionMode: "进场取卡，离场读卡",
+      tariffBoard: {
+        pricingMethod: "政府指导价",
+        operatorName: "深圳市某物业管理有限公司",
+        complaintPhone: "12358",
+        vehicleRows: [
+          {
+            label: "小车",
+            temporaryText: "30分钟5元",
+            overnightPrice: 15,
+            monthlyPrice: 180
+          }
+        ]
+      },
+      pricingByVehicle: {
+        new_energy: {
+          freeMinutes: 120
+        }
+      }
+    },
+    confidence: 88
+  });
+  assert.strictEqual(tariffBoard.pricing.chargeType, "hourly");
+  assert.strictEqual(tariffBoard.pricing.freeMinutes, 30);
+  assert.strictEqual(tariffBoard.pricing.maxDailyPrice, 15);
+  assert.strictEqual(tariffBoard.pricing.collectionMode, "auto_gate");
+  assert.strictEqual(tariffBoard.pricing.tariffBoard.pricingMethod, "政府指导价");
+  assert.strictEqual(tariffBoard.pricing.tariffBoard.vehicleRows[0].label, "小车");
+  assert.strictEqual(tariffBoard.pricing.pricingByVehicle.new_energy.freeMinutes, 120);
+
+  const flatMock = buildMockRecognition({
+    form: {
+      name: "一次性停车场",
+      address: "测试路 3 号"
+    },
+    textHint: "自动闸机收费，24小时10元，超过24小时重复计费，投诉电话 12358"
+  });
+  assert.strictEqual(flatMock.pricing.chargeType, "flat");
+  assert.strictEqual(flatMock.pricing.flatDurationMinutes, 1440);
+  assert.strictEqual(flatMock.pricing.flatPrice, 10);
+  assert.strictEqual(flatMock.pricing.flatRepeat, true);
+  assert.strictEqual(flatMock.pricing.collectionMode, "auto_gate");
 }
 
 function testServerAuthHelpers() {

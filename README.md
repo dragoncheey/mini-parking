@@ -4,7 +4,7 @@
 
 ## 已实现
 
-- 按预计停车时长计算费用，支持免费时长、计费单位、单日封顶和阶梯计费。
+- 按预计停车时长计算费用，支持免费时长、计费单位、单日封顶、阶梯计费和按次/24 小时包段收费。
 - 用户可通过 `wx.login` 建立登录态，后续可接后端换取 openid/session。
 - 通过微信地图选点或当前位置设置目的地，并只推荐目的地 3 公里内的停车场。
 - 首页使用微信内嵌 `map` 组件展示目的地和候选停车场 marker。
@@ -16,7 +16,7 @@
 - 只有上报人可以维护自己提交的停车场，修改后可信度重置并清空旧的点赞/踩评价。
 - 其他登录用户可以对停车场信息点赞或踩，影响可信度并参与推荐排序。
 - 录入页支持拍照/上传收费牌或入口照片，并结合定位保存可复核的数据证据。
-- 录入页可调用本地识别 API，把拍照证据和定位字段交给模型识别，自动回填收费字段。
+- 录入页可调用本地识别 API，把拍照证据和定位字段交给模型识别，自动回填收费规则、收费方式和收费牌信息。
 - 保存经纬度、入口备注和可选高德 POI；不强依赖高德地图。
 - 详情页展示现场图片；需要导航时弹出微信位置页、已配置地图小程序和复制坐标等选项。
 - Node 后端提供登录、停车场、车辆、投票、图片上传和识别接口；数据持久化使用 Supabase。
@@ -106,9 +106,13 @@ const cloudbaseConfig = {
 
 示例数据在 `data/seedParking.js`，可通过 `node server/seed.js` 导入 Supabase。小程序运行时不再读取本地示例或离线缓存，停车场、车辆、投票和维护都只通过后端 API 读写：
 
+- `pricing.chargeType`：`hourly`、`flat`、`ladder`，分别表示按时、按次/包段、阶梯计费。
 - `pricing.freeMinutes`：免费分钟数。
 - `pricing.billingUnitMinutes` / `pricing.unitPrice`：计费单位和单价。
+- `pricing.flatDurationMinutes` / `pricing.flatPrice` / `pricing.flatRepeat`：按次或 24 小时包段收费，例如 24 小时 10 元。
 - `pricing.ladder`：阶梯计费。
+- `pricing.collectionMode`：`auto_gate`、`manual`、`mixed`、`unknown`，用于标记自动闸机/人工收费。
+- `pricing.tariffBoard.pricingMethod` / `operatorName` / `complaintPhone`：收费牌上的定价方式、收费单位和投诉电话。
 - `pricing.pricingByVehicle.new_energy` / `pricing.pricingByVehicle.fuel`：按车型覆盖默认收费规则；未填写的字段会继承默认规则。
 - `availability`：`high`、`medium`、`low`、`unknown`。
 - `evidence.photos`：拍照/上传的收费牌或入口证据。
@@ -128,7 +132,7 @@ const cloudbaseConfig = {
 - `new_energy`：新能源小型车。
 - `fuel`：燃油小型车。
 
-停车场录入页默认收费规则等同燃油车/基础规则；开启“新能源小型车优惠”后，可以只填写新能源免费分钟。例如常州市新能源 2 小时免费，可填 `120`，计费单位和单价留空，系统会在 2 小时后继承停车场默认计费规则。
+停车场录入页默认收费规则等同燃油车/基础规则；开启“新能源小型车优惠”后，可以只填写新能源免费分钟。例如常州市新能源 2 小时免费，可填 `120`，计费单位和单价留空，系统会在 2 小时后继承停车场默认计费规则。若收费牌写明新能源和燃油车价格不同，也可以填写新能源自己的计费单位、单价、封顶或包段价格。
 
 ## 第三方地图跳转
 

@@ -33,20 +33,23 @@
     </view>
   </view>
 
-  <view class="map-scope-tabs">
-    <view
-      wx:for="{{parkingScopeOptions}}"
-      wx:key="value"
-      class="map-scope-tab {{parkingScope === item.value ? 'is-active' : ''}}"
-      data-scope="{{item.value}}"
-      bindtap="setParkingScope"
-    >
-      <text>{{item.label}}</text>
-    </view>
-  </view>
-
   <view class="map-action-stack" style="bottom: {{mapLocateBottomPx}}px;">
-    <view class="map-round-button" bindtap="useCurrentLocationAsDestination">定位</view>
+    <view
+      class="map-round-button locate-control"
+      bindtap="useCurrentLocationAsDestination"
+      hover-class="locate-control-hover"
+      aria-role="button"
+      aria-label="定位到当前位置"
+    >
+      <view class="locate-orb">
+        <view class="locate-ring locate-ring-outer"></view>
+        <view class="locate-ring locate-ring-inner"></view>
+        <view class="locate-axis locate-axis-x"></view>
+        <view class="locate-axis locate-axis-y"></view>
+        <view class="locate-arrow"></view>
+        <view class="locate-dot"></view>
+      </view>
+    </view>
   </view>
 
   <view
@@ -57,10 +60,10 @@
       <view
         class="sheet-drag-zone"
         bindtap="toggleSheet"
-        bindtouchstart="onSheetTouchStart"
-        bindtouchmove="onSheetTouchMove"
-        bindtouchend="onSheetTouchEnd"
-        bindtouchcancel="onSheetTouchCancel"
+        catchtouchstart="onSheetTouchStart"
+        catchtouchmove="onSheetTouchMove"
+        catchtouchend="onSheetTouchEnd"
+        catchtouchcancel="onSheetTouchCancel"
       >
         <view class="sheet-grabber"></view>
         <view class="sheet-summary-row">
@@ -84,10 +87,6 @@
           <view class="quick-summary-item">
             <text class="quick-label">时长</text>
             <text class="quick-value">{{durationText}}</text>
-          </view>
-          <view class="quick-summary-item">
-            <text class="quick-label">范围</text>
-            <text class="quick-value">{{parkingScopeText}}</text>
           </view>
         </view>
       </view>

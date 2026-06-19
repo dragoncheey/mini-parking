@@ -15,6 +15,7 @@
   left: 0;
   width: 100%;
   height: 100%;
+  z-index: 1;
 }
 
 .map-top-tools {
@@ -127,38 +128,6 @@
   background: rgba(255, 255, 255, 0.96);
 }
 
-.map-scope-tabs {
-  position: absolute;
-  top: 300rpx;
-  right: 24rpx;
-  z-index: 4;
-  overflow: hidden;
-  border-radius: 8rpx;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 12rpx 32rpx rgba(24, 33, 47, 0.14);
-}
-
-.map-scope-tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 96rpx;
-  height: 96rpx;
-  color: #283649;
-  font-size: 26rpx;
-  font-weight: 700;
-  border-bottom: 1rpx solid #edf1f5;
-}
-
-.map-scope-tab:last-child {
-  border-bottom: 0;
-}
-
-.map-scope-tab.is-active {
-  color: #ffffff;
-  background: #2f7fed;
-}
-
 .map-action-stack {
   position: absolute;
   right: 32rpx;
@@ -169,15 +138,139 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 92rpx;
-  height: 92rpx;
-  border: 1rpx solid #dce4ec;
+  width: 86rpx;
+  height: 86rpx;
+  border: 0;
+  border-radius: 28rpx;
+  background: rgba(248, 252, 255, 0.92);
+  box-shadow: 0 14rpx 34rpx rgba(20, 47, 66, 0.2);
+}
+
+.locate-control {
+  position: relative;
+  overflow: hidden;
+}
+
+.locate-control::before {
+  content: "";
+  position: absolute;
+  top: 8rpx;
+  left: 10rpx;
+  width: 48rpx;
+  height: 28rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.locate-control::after {
+  content: "";
+  position: absolute;
+  right: 10rpx;
+  bottom: 8rpx;
+  width: 24rpx;
+  height: 24rpx;
   border-radius: 50%;
-  color: #283649;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 10rpx 30rpx rgba(24, 33, 47, 0.14);
-  font-size: 24rpx;
-  font-weight: 800;
+  background: rgba(36, 184, 211, 0.2);
+  box-shadow: 0 0 26rpx rgba(36, 184, 211, 0.35);
+}
+
+.locate-control-hover {
+  transform: scale(0.96);
+  opacity: 0.92;
+}
+
+.locate-orb {
+  position: relative;
+  z-index: 1;
+  width: 58rpx;
+  height: 58rpx;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #eefbff 0%, #d9f6ff 46%, #ffffff 100%);
+  box-shadow:
+    inset 0 0 0 2rpx rgba(255, 255, 255, 0.82),
+    inset 0 -8rpx 18rpx rgba(33, 151, 191, 0.16),
+    0 0 24rpx rgba(33, 151, 191, 0.26);
+}
+
+.locate-ring,
+.locate-axis,
+.locate-arrow,
+.locate-dot {
+  position: absolute;
+}
+
+.locate-ring {
+  border-radius: 50%;
+  border-style: solid;
+}
+
+.locate-ring-outer {
+  top: 6rpx;
+  right: 6rpx;
+  bottom: 6rpx;
+  left: 6rpx;
+  border-width: 2rpx;
+  border-color: rgba(24, 128, 172, 0.42);
+}
+
+.locate-ring-inner {
+  top: 17rpx;
+  right: 17rpx;
+  bottom: 17rpx;
+  left: 17rpx;
+  border-width: 2rpx;
+  border-color: rgba(22, 106, 91, 0.36);
+}
+
+.locate-axis {
+  left: 50%;
+  top: 50%;
+  background: rgba(16, 92, 118, 0.42);
+  transform: translate(-50%, -50%);
+}
+
+.locate-axis-x {
+  width: 40rpx;
+  height: 2rpx;
+}
+
+.locate-axis-y {
+  width: 2rpx;
+  height: 40rpx;
+}
+
+.locate-arrow {
+  left: 25rpx;
+  top: 12rpx;
+  width: 0;
+  height: 0;
+  border-left: 9rpx solid transparent;
+  border-right: 9rpx solid transparent;
+  border-bottom: 28rpx solid #176fd4;
+  transform: rotate(42deg);
+  transform-origin: 50% 76%;
+}
+
+.locate-arrow::after {
+  content: "";
+  position: absolute;
+  left: -4rpx;
+  top: 11rpx;
+  width: 8rpx;
+  height: 14rpx;
+  border-radius: 999rpx;
+  background: #f8fcff;
+}
+
+.locate-dot {
+  left: 50%;
+  top: 50%;
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: #20cad3;
+  box-shadow: 0 0 14rpx rgba(32, 202, 211, 0.78);
+  transform: translate(-50%, -50%);
 }
 
 .bottom-sheet {

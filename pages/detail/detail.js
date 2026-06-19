@@ -5,6 +5,12 @@ const { openParkingLocation } = require("../../utils/location");
 const app = getApp();
 const DEFAULT_DURATION_MINUTES = 30;
 const MIN_DURATION_MINUTES = 1;
+const COLLECTION_MODE_LABELS = {
+  auto_gate: "自动闸机/自助收费",
+  manual: "人工收费",
+  mixed: "自动+人工收费",
+  unknown: "待确认"
+};
 
 Page({
   data: {
@@ -15,6 +21,12 @@ Page({
     evidenceStatus: "无照片证据",
     evidencePhotos: [],
     evidencePhotoCount: 0,
+    collectionModeText: "待确认",
+    pricingMethodText: "",
+    operatorNameText: "",
+    complaintPhoneText: "",
+    vehicleRows: [],
+    vehicleRowCount: 0,
     currentVehicle: null,
     currentVehicleText: "未设置车辆",
     canVote: false,
@@ -68,6 +80,8 @@ Page({
     })[0];
     const amap = lot.location && lot.location.amap ? lot.location.amap : {};
     const evidence = lot.evidence || {};
+    const pricing = lot.pricing || {};
+    const tariffBoard = pricing.tariffBoard || {};
 
     let upClass = "";
     let downClass = "";
@@ -88,6 +102,12 @@ Page({
       evidenceStatus: evidence.recognitionStatus || "无照片证据",
       evidencePhotos: evidence.photos || [],
       evidencePhotoCount: evidence.photos ? evidence.photos.length : 0,
+      collectionModeText: COLLECTION_MODE_LABELS[pricing.collectionMode || "unknown"] || COLLECTION_MODE_LABELS.unknown,
+      pricingMethodText: tariffBoard.pricingMethod || "",
+      operatorNameText: tariffBoard.operatorName || "",
+      complaintPhoneText: tariffBoard.complaintPhone || "",
+      vehicleRows: Array.isArray(tariffBoard.vehicleRows) ? tariffBoard.vehicleRows : [],
+      vehicleRowCount: Array.isArray(tariffBoard.vehicleRows) ? tariffBoard.vehicleRows.length : 0,
       canVote: Boolean(getLoggedInUser() && !lot.canEdit),
       upVoteClass: upClass,
       downVoteClass: downClass
