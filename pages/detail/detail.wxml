@@ -90,10 +90,6 @@
         <text class="data-value">{{lot.location.latitude}}, {{lot.location.longitude}}</text>
       </view>
       <view class="data-row">
-        <text class="data-label">高德 POI</text>
-        <text class="data-value">{{amapPoiId}}</text>
-      </view>
-      <view class="data-row">
         <text class="data-label">数据来源</text>
         <text class="data-value">{{sourceText}}，{{lot.owner.nickname}}</text>
       </view>

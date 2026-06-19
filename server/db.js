@@ -98,8 +98,7 @@ function normalizeLotRow(row) {
     distanceHintMeters: Number.isFinite(Number(row.distance)) ? Math.round(Number(row.distance)) : undefined,
     location: {
       latitude: row.latitude,
-      longitude: row.longitude,
-      amap: row.amap || {}
+      longitude: row.longitude
     },
     access: {
       entrance: row.entrance_tip || "入口待补充",

@@ -10,7 +10,6 @@ Page({
   data: {
     lot: null,
     detail: null,
-    amapPoiId: "未录入",
     sourceText: "手动录入",
     evidenceStatus: "无照片证据",
     evidencePhotos: [],
@@ -66,7 +65,6 @@ Page({
       destination: app.globalData.destination || app.globalData.userLocation,
       vehicleType: currentVehicle ? currentVehicle.vehicleType : ""
     })[0];
-    const amap = lot.location && lot.location.amap ? lot.location.amap : {};
     const evidence = lot.evidence || {};
 
     let upClass = "";
@@ -83,7 +81,6 @@ Page({
       currentVehicleText: currentVehicle
         ? `${currentVehicle.plateNumber} · ${currentVehicle.vehicleTypeLabel}`
         : "未设置车辆",
-      amapPoiId: amap.poiId || "未录入",
       sourceText: lot.source === "user" ? "用户分享" : "手动录入",
       evidenceStatus: evidence.recognitionStatus || "无照片证据",
       evidencePhotos: evidence.photos || [],
@@ -138,12 +135,10 @@ Page({
   copyLocation() {
     const lot = this.data.lot;
     if (!lot) return;
-    const amap = (lot.location && lot.location.amap) || {};
     const text = [
       lot.name,
       lot.address,
-      `坐标：${lot.location.latitude},${lot.location.longitude}`,
-      amap.poiId ? `高德 POI：${amap.poiId}` : ""
+      `坐标：${lot.location.latitude},${lot.location.longitude}`
     ].filter(Boolean).join("\n");
 
     wx.setClipboardData({

@@ -171,6 +171,12 @@
   gap: 18rpx;
 }
 
+.three-column {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
 .field {
   margin-bottom: 18rpx;
 }
@@ -219,8 +225,132 @@
   min-height: 112rpx;
 }
 
-.mono-textarea {
-  font-family: monospace;
+.section-tag {
+  flex: 0 0 auto;
+  padding: 8rpx 14rpx;
+  border-radius: 4rpx;
+  color: #166a5b;
+  background: #e4f3ef;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.pricing-type-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 20rpx;
+  border: 1rpx solid #cddfeb;
+  border-radius: 8rpx;
+  background: #f5faff;
+}
+
+.pricing-type-card > view {
+  flex: 1;
+  min-width: 0;
+}
+
+.pricing-type-title,
+.pricing-type-copy,
+.subsection-title,
+.subsection-hint,
+.pricing-type-action,
+.ladder-row-title {
+  display: block;
+}
+
+.pricing-type-title {
+  color: #143d35;
+  font-size: 30rpx;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.pricing-type-copy {
+  margin-top: 8rpx;
+  color: #657286;
+  font-size: 24rpx;
+  line-height: 1.35;
+}
+
+.pricing-type-action {
+  flex: 0 0 auto;
+  color: #2f7fed;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.pricing-subsection {
+  margin-top: 22rpx;
+  padding-top: 22rpx;
+  border-top: 1rpx solid #edf2f6;
+}
+
+.subsection-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.subsection-title {
+  margin-bottom: 16rpx;
+  color: #18212f;
+  font-size: 26rpx;
+  font-weight: 900;
+}
+
+.subsection-row .subsection-title {
+  margin-bottom: 0;
+}
+
+.subsection-hint {
+  flex: 1;
+  color: #657286;
+  font-size: 22rpx;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.ladder-list {
+  display: grid;
+  gap: 16rpx;
+}
+
+.ladder-row {
+  padding: 18rpx;
+  border: 1rpx solid #dce4ec;
+  border-radius: 8rpx;
+  background: #ffffff;
+}
+
+.ladder-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.ladder-row-title {
+  color: #344456;
+  font-size: 24rpx;
+  font-weight: 900;
+}
+
+.ladder-remove {
+  flex: 0 0 92rpx;
+  width: 92rpx;
+  min-height: 52rpx;
+  padding: 0;
+  font-size: 22rpx;
+}
+
+.add-ladder-button {
+  width: 100%;
+  min-height: 66rpx;
   font-size: 24rpx;
 }
 
@@ -230,6 +360,12 @@
   border: 1rpx solid #d9e7e3;
   border-radius: 8rpx;
   background: #f8fafc;
+}
+
+.vehicle-rule-fields {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #e4ebf0;
 }
 
 .switch-row {
@@ -265,4 +401,10 @@
   margin-top: 24rpx;
   min-height: 88rpx;
   font-size: 30rpx;
+}
+
+@media (max-width: 360px) {
+  .three-column {
+    grid-template-columns: 1fr;
+  }
 }

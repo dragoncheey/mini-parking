@@ -25,6 +25,8 @@ const {
   normalizeVehicles
 } = require("../utils/storage");
 
+const LEGACY_POI_KEY = "amap" + "PoiId";
+
 function testPricing() {
   assert.strictEqual(calculateParkingFee(60, seedParkingLots[0].pricing), 0);
   assert.strictEqual(calculateParkingFee(180, seedParkingLots[0].pricing), 10);
@@ -100,6 +102,7 @@ function testRecognitionParsing() {
 
   assert.strictEqual(normalized.name, "测试停车场");
   assert.strictEqual(normalized.pricing.freeMinutes, 30);
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(normalized.location, LEGACY_POI_KEY), false);
   assert.strictEqual(mock.pricing.freeMinutes, 60);
   assert.strictEqual(mock.pricing.chargeType, "hourly");
   assert.strictEqual(mock.pricing.billingUnitMinutes, 60);
@@ -450,6 +453,7 @@ async function testSenseNovaClient() {
     assert.deepStrictEqual(calls[0].body.response_format, { type: "json_object" });
     assert.strictEqual(calls[0].body.reasoning_effort, "none");
     assert.strictEqual(calls[0].body.messages[1].content[0].type, "text");
+    assert.ok(!calls[0].body.messages[1].content[0].text.includes(LEGACY_POI_KEY));
     assert.strictEqual(calls[0].body.messages[1].content[1].type, "image_url");
     assert.strictEqual(calls[0].body.messages[1].content[1].image_url.url, "data:image/jpeg;base64,abc123");
   } finally {

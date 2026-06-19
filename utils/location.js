@@ -1,5 +1,3 @@
-const { amapMiniProgram, baiduMiniProgram } = require("../config/map");
-
 const EARTH_RADIUS_METERS = 6371000;
 
 function toRadians(degrees) {
@@ -79,24 +77,6 @@ function buildNavigationActions(lot) {
     }
   }];
 
-  if (amapMiniProgram.enabled && amapMiniProgram.appId) {
-    actions.push({
-      label: "高德地图",
-      run() {
-        openConfiguredMapMiniProgram(lot, amapMiniProgram);
-      }
-    });
-  }
-
-  if (baiduMiniProgram.enabled && baiduMiniProgram.appId) {
-    actions.push({
-      label: "百度地图",
-      run() {
-        openConfiguredMapMiniProgram(lot, baiduMiniProgram);
-      }
-    });
-  }
-
   actions.push({
     label: "复制坐标",
     run() {
@@ -105,16 +85,6 @@ function buildNavigationActions(lot) {
   });
 
   return actions;
-}
-
-function openConfiguredMapMiniProgram(lot, config) {
-  wx.navigateToMiniProgram({
-    appId: config.appId,
-    path: config.buildPath(lot),
-    fail() {
-      openLocationFallback(lot);
-    }
-  });
 }
 
 function openLocationFallback(lot) {
@@ -131,12 +101,10 @@ function openLocationFallback(lot) {
 }
 
 function copyParkingLocation(lot, title) {
-  const amap = lot.location && lot.location.amap ? lot.location.amap : {};
   const text = [
     lot.name,
     lot.address,
-    `坐标：${lot.location.latitude},${lot.location.longitude}`,
-    amap.poiId ? `高德 POI：${amap.poiId}` : ""
+    `坐标：${lot.location.latitude},${lot.location.longitude}`
   ].filter(Boolean).join("\n");
 
   wx.setClipboardData({

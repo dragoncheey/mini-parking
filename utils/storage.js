@@ -121,8 +121,7 @@ function normalizeParkingLot(lot) {
     distanceHintMeters: source.distanceHintMeters || source.distance,
     location: {
       latitude,
-      longitude,
-      amap: (source.location && source.location.amap) || source.amap || {}
+      longitude
     },
     access: {
       entrance: access.entrance || source.entrance_tip || "入口待补充",

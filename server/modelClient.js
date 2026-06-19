@@ -8,7 +8,7 @@ function buildUserPrompt(payload) {
   return [
     "请从停车场收费牌/入口照片和补充信息中识别停车场数据。",
     "只返回 JSON，不要解释。",
-    "JSON 字段：name, address, entrance, location{latitude,longitude,amapPoiId}, pricing, availability, walkingPenaltyMinutes, confidence, evidenceSummary, warnings。",
+    "JSON 字段：name, address, entrance, location{latitude,longitude}, pricing, availability, walkingPenaltyMinutes, confidence, evidenceSummary, warnings。",
     "pricing 字段结构：chargeType(hourly|flat|ladder), freeMinutes, billingUnitMinutes, unitPrice, maxDailyPrice, minCharge, flatDurationMinutes, flatPrice, flatRepeat, ladder, notes。",
     "pricing.pricingByVehicle 可包含 new_energy 和 fuel 覆盖规则；新能源与燃油车免费时长或价格不同必须分别写入，未识别到的字段不要编造。",
     "按次/包段停车场示例：24小时10元 -> chargeType=flat, flatDurationMinutes=1440, flatPrice=10, flatRepeat=true；一次性20元 -> chargeType=flat, flatDurationMinutes=1440, flatPrice=20, flatRepeat=false。",

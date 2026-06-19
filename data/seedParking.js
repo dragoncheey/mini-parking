@@ -10,12 +10,7 @@ const seedParkingLots = [
     distanceHintMeters: 420,
     location: {
       latitude: 31.23041,
-      longitude: 121.4737,
-      amap: {
-        poiId: "B0FFEXAMPLE01",
-        cityCode: "021",
-        name: "星河广场地下停车场"
-      }
+      longitude: 121.4737
     },
     access: {
       entrance: "商场东门旁下坡入口",
@@ -43,12 +38,7 @@ const seedParkingLots = [
     distanceHintMeters: 260,
     location: {
       latitude: 31.23208,
-      longitude: 121.47665,
-      amap: {
-        poiId: "B0FFEXAMPLE02",
-        cityCode: "021",
-        name: "宏运大厦停车场"
-      }
+      longitude: 121.47665
     },
     access: {
       entrance: "写字楼南侧入口，晚高峰排队较少",
@@ -82,12 +72,7 @@ const seedParkingLots = [
     distanceHintMeters: 180,
     location: {
       latitude: 31.22882,
-      longitude: 121.47091,
-      amap: {
-        poiId: "B0FFEXAMPLE03",
-        cityCode: "021",
-        name: "滨河路公共停车点"
-      }
+      longitude: 121.47091
     },
     access: {
       entrance: "路侧泊位，入口无闸机",
@@ -115,12 +100,7 @@ const seedParkingLots = [
     distanceHintMeters: 620,
     location: {
       latitude: 31.22696,
-      longitude: 121.47822,
-      amap: {
-        poiId: "B0FFEXAMPLE04",
-        cityCode: "021",
-        name: "安和医院停车楼"
-      }
+      longitude: 121.47822
     },
     access: {
       entrance: "急诊楼西侧入口，白天车流较密",
@@ -157,12 +137,7 @@ const seedParkingLots = [
     distanceHintMeters: 540,
     location: {
       latitude: 31.23148,
-      longitude: 121.4688,
-      amap: {
-        poiId: "B0FFEXAMPLE05",
-        cityCode: "021",
-        name: "会展中心临时停车场"
-      }
+      longitude: 121.4688
     },
     access: {
       entrance: "北侧临时入口，活动日排队",

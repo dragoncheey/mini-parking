@@ -20,9 +20,9 @@ const availabilityOptions = [
 ];
 
 const chargeTypeOptions = [
-  { label: "按时计费", value: "hourly" },
-  { label: "按次/包段", value: "flat" },
-  { label: "阶梯计费", value: "ladder" }
+  { label: "按时计费", value: "hourly", hint: "免费后按固定时间单价累计" },
+  { label: "按次/包段", value: "flat", hint: "一次收费或按 24 小时重复" },
+  { label: "阶梯计费", value: "ladder", hint: "不同停车时段不同价格" }
 ];
 
 function numberFromForm(value, fallback) {
@@ -43,6 +43,34 @@ function optionIndex(options, value, fallbackIndex) {
   return index >= 0 ? index : fallbackIndex;
 }
 
+function defaultLadderRows() {
+  return [
+    { id: "tier-1", untilMinutes: "120", billingUnitMinutes: "30", unitPrice: "" },
+    { id: "tier-final", untilMinutes: "", billingUnitMinutes: "60", unitPrice: "" }
+  ];
+}
+
+function normalizeLadderRows(ladder) {
+  if (!Array.isArray(ladder) || !ladder.length) {
+    return defaultLadderRows();
+  }
+  return ladder.map((step, index) => ({
+    id: step.id || `tier-${index + 1}`,
+    untilMinutes: step.untilMinutes == null ? "" : textValue(step.untilMinutes),
+    billingUnitMinutes: textValue(step.billingUnitMinutes || 60),
+    unitPrice: textValue(step.unitPrice || 0)
+  }));
+}
+
+function buildLadderFromRows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      untilMinutes: String(row.untilMinutes || "").trim() ? numberFromForm(row.untilMinutes, 0) : null,
+      billingUnitMinutes: numberFromForm(row.billingUnitMinutes, 60),
+      unitPrice: numberFromForm(row.unitPrice, 0)
+    }));
+}
+
 function inferMediaType(path) {
   const value = String(path || "").toLowerCase();
   if (value.indexOf(".png") >= 0) return "image/png";
@@ -57,11 +85,11 @@ function isUnauthorizedError(error) {
 function buildEmptyForm() {
   return {
     name: "", address: "", entrance: "",
-    latitude: "", longitude: "", amapPoiId: "",
+    latitude: "", longitude: "",
     chargeType: "hourly",
     freeMinutes: "60", billingUnitMinutes: "60", unitPrice: "5", maxDailyPrice: "", minCharge: "", notes: "",
     flatDurationMinutes: "1440", flatPrice: "", flatRepeat: true,
-    ladderJson: "",
+    ladderRows: defaultLadderRows(),
     newEnergyEnabled: false,
     newEnergyFreeMinutes: "120", newEnergyBillingUnitMinutes: "",
     newEnergyUnitPrice: "", newEnergyMaxDailyPrice: "",
@@ -72,7 +100,6 @@ function buildEmptyForm() {
 
 function formFromLot(lot) {
   const location = lot.location || {};
-  const amap = location.amap || {};
   const pricing = lot.pricing || {};
   const pricingByVehicle = pricing.pricingByVehicle || {};
   const newEnergyRule = pricingByVehicle.new_energy || null;
@@ -84,7 +111,6 @@ function formFromLot(lot) {
     entrance: textValue(access.entrance),
     latitude: textValue(location.latitude),
     longitude: textValue(location.longitude),
-    amapPoiId: textValue(amap.poiId),
     chargeType: textValue(pricing.chargeType || "hourly"),
     freeMinutes: textValue(pricing.freeMinutes || 0),
     billingUnitMinutes: textValue(pricing.billingUnitMinutes || 60),
@@ -94,7 +120,7 @@ function formFromLot(lot) {
     flatDurationMinutes: textValue(pricing.flatDurationMinutes || 1440),
     flatPrice: pricing.flatPrice ? textValue(pricing.flatPrice) : "",
     flatRepeat: pricing.flatRepeat !== false,
-    ladderJson: Array.isArray(pricing.ladder) && pricing.ladder.length ? JSON.stringify(pricing.ladder, null, 2) : "",
+    ladderRows: normalizeLadderRows(pricing.ladder),
     notes: textValue(pricing.notes),
     newEnergyEnabled: Boolean(newEnergyRule),
     newEnergyFreeMinutes: newEnergyRule ? textValue(newEnergyRule.freeMinutes || 0) : "120",
@@ -116,6 +142,7 @@ Page({
     chargeTypeOptions,
     chargeTypeIndex: 0,
     chargeTypeLabel: chargeTypeOptions[0].label,
+    chargeTypeHint: chargeTypeOptions[0].hint,
     isFlatChargeType: false,
     isLadderChargeType: false,
     isLoggedIn: false,
@@ -175,6 +202,7 @@ Page({
       availabilityLabel: availabilityOptions[1].label,
       chargeTypeIndex: 0,
       chargeTypeLabel: chargeTypeOptions[0].label,
+      chargeTypeHint: chargeTypeOptions[0].hint,
       isFlatChargeType: false,
       isLadderChargeType: false,
       evidencePhotos: [],
@@ -297,6 +325,7 @@ Page({
       availabilityLabel: availabilityOptions[availabilityIndex].label,
       chargeTypeIndex,
       chargeTypeLabel: chargeTypeOptions[chargeTypeIndex].label,
+      chargeTypeHint: chargeTypeOptions[chargeTypeIndex].hint,
       isFlatChargeType: form.chargeType === "flat",
       isLadderChargeType: form.chargeType === "ladder",
       evidencePhotos: photos,
@@ -323,6 +352,29 @@ Page({
     this.setData({ [`form.${key}`]: Boolean(event.detail.value) });
   },
 
+  onLadderInput(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    const key = event.currentTarget.dataset.key;
+    if (!Number.isFinite(index) || !key) return;
+    this.setData({ [`form.ladderRows[${index}].${key}`]: event.detail.value });
+  },
+
+  addLadderRow() {
+    const rows = (this.data.form.ladderRows || []).concat({
+      id: `tier-${Date.now()}`,
+      untilMinutes: "",
+      billingUnitMinutes: "60",
+      unitPrice: ""
+    });
+    this.setData({ "form.ladderRows": rows });
+  },
+
+  removeLadderRow(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    const rows = (this.data.form.ladderRows || []).filter((item, itemIndex) => itemIndex !== index);
+    this.setData({ "form.ladderRows": rows.length ? rows : defaultLadderRows() });
+  },
+
   onAvailabilityChange(event) {
     const availabilityIndex = Number(event.detail.value);
     this.setData({ availabilityIndex, availabilityLabel: availabilityOptions[availabilityIndex].label });
@@ -331,12 +383,21 @@ Page({
   onChargeTypeChange(event) {
     const chargeTypeIndex = Number(event.detail.value);
     const option = chargeTypeOptions[chargeTypeIndex] || chargeTypeOptions[0];
-    this.setData({
+    const updates = {
       chargeTypeIndex,
       chargeTypeLabel: option.label,
+      chargeTypeHint: option.hint,
       isFlatChargeType: option.value === "flat",
       isLadderChargeType: option.value === "ladder",
       "form.chargeType": option.value
+    };
+
+    if (option.value === "ladder" && (!this.data.form.ladderRows || !this.data.form.ladderRows.length)) {
+      updates["form.ladderRows"] = defaultLadderRows();
+    }
+
+    this.setData({
+      ...updates
     });
   },
 
@@ -473,9 +534,9 @@ Page({
       "form.flatDurationMinutes": `${pricing.flatDurationMinutes == null ? this.data.form.flatDurationMinutes : pricing.flatDurationMinutes}`,
       "form.flatPrice": pricing.flatPrice ? `${pricing.flatPrice}` : this.data.form.flatPrice,
       "form.flatRepeat": pricing.flatRepeat == null ? this.data.form.flatRepeat : Boolean(pricing.flatRepeat),
-      "form.ladderJson": Array.isArray(pricing.ladder) && pricing.ladder.length
-        ? JSON.stringify(pricing.ladder, null, 2)
-        : this.data.form.ladderJson,
+      "form.ladderRows": Array.isArray(pricing.ladder) && pricing.ladder.length
+        ? normalizeLadderRows(pricing.ladder)
+        : this.data.form.ladderRows,
       "form.notes": pricing.notes || this.data.form.notes,
       "form.walkingPenaltyMinutes": `${result.walkingPenaltyMinutes == null ? this.data.form.walkingPenaltyMinutes : result.walkingPenaltyMinutes}`,
       recognitionWarnings: warnings,
@@ -486,12 +547,12 @@ Page({
 
     if (location.latitude != null) updates["form.latitude"] = `${location.latitude}`;
     if (location.longitude != null) updates["form.longitude"] = `${location.longitude}`;
-    if (location.amapPoiId) updates["form.amapPoiId"] = location.amapPoiId;
 
     if (pricing.chargeType) {
       const index = optionIndex(chargeTypeOptions, pricing.chargeType, 0);
       updates.chargeTypeIndex = index;
       updates.chargeTypeLabel = chargeTypeOptions[index].label;
+      updates.chargeTypeHint = chargeTypeOptions[index].hint;
       updates.isFlatChargeType = pricing.chargeType === "flat";
       updates.isLadderChargeType = pricing.chargeType === "ladder";
     }
@@ -567,12 +628,15 @@ Page({
       if (numberFromForm(form.flatDurationMinutes, 0) <= 0) return "按次/包段时长必须大于 0";
       if (numberFromForm(form.flatPrice, -1) < 0) return "按次/包段价格不能为负数";
     } else if (form.chargeType === "ladder") {
-      if (!form.ladderJson.trim()) return "请填写阶梯计费明细";
-      try {
-        const ladder = JSON.parse(form.ladderJson);
-        if (!Array.isArray(ladder) || !ladder.length) return "阶梯计费明细必须是数组";
-      } catch (error) {
-        return "阶梯计费明细必须是合法 JSON";
+      const rows = form.ladderRows || [];
+      if (!rows.length) return "请至少填写一条阶梯规则";
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        if (numberFromForm(row.billingUnitMinutes, 0) <= 0) return `第 ${index + 1} 条阶梯计费单位必须大于 0`;
+        if (numberFromForm(row.unitPrice, -1) < 0) return `第 ${index + 1} 条阶梯价格不能为负数`;
+        if (String(row.untilMinutes || "").trim() && numberFromForm(row.untilMinutes, 0) <= 0) {
+          return `第 ${index + 1} 条截止分钟必须大于 0`;
+        }
       }
     } else {
       if (numberFromForm(form.billingUnitMinutes, 0) <= 0) return "计费单位必须大于 0";
@@ -597,7 +661,7 @@ Page({
       basePricing.flatPrice = numberFromForm(form.flatPrice, 0);
       basePricing.flatRepeat = Boolean(form.flatRepeat);
     } else if (basePricing.chargeType === "ladder") {
-      basePricing.ladder = JSON.parse(form.ladderJson);
+      basePricing.ladder = buildLadderFromRows(form.ladderRows);
     } else {
       basePricing.billingUnitMinutes = numberFromForm(form.billingUnitMinutes, 60);
       basePricing.unitPrice = numberFromForm(form.unitPrice, 0);

@@ -185,8 +185,7 @@ function normalizeRecognition(raw) {
     entrance: String(access.entrance || source.entrance || "").trim(),
     location: {
       latitude: Number.isFinite(Number(location.latitude)) ? Number(location.latitude) : null,
-      longitude: Number.isFinite(Number(location.longitude)) ? Number(location.longitude) : null,
-      amapPoiId: String(location.amapPoiId || location.poiId || "").trim()
+      longitude: Number.isFinite(Number(location.longitude)) ? Number(location.longitude) : null
     },
     pricing: normalizedPricing,
     availability: ["high", "medium", "low", "unknown"].indexOf(source.availability) >= 0
@@ -277,8 +276,7 @@ function buildMockRecognition(payload) {
     entrance: form.entrance || "入口待复核",
     location: {
       latitude: form.latitude,
-      longitude: form.longitude,
-      amapPoiId: form.amapPoiId
+      longitude: form.longitude
     },
     pricing,
     availability: "unknown",
