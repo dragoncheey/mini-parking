@@ -19,8 +19,9 @@ const DEFAULT_DURATION_MINUTES = 30;
 const MIN_DURATION_MINUTES = 1;
 const MAX_DURATION_DAYS = 7;
 const MAX_DURATION_MINUTES = (MAX_DURATION_DAYS * 24 * 60) + (23 * 60) + 59;
-const SHEET_COLLAPSED_HEIGHT = 328;
+const SHEET_COLLAPSED_HEIGHT = 396;
 const SHEET_MAP_GAP = 96;
+const MAP_EXPANDED_SHEET_HEIGHT = 220;
 const SHEET_ANIMATION_MS = 220;
 const SHEET_DRAG_THRESHOLD = 56;
 const MAP_VISIBLE_GAP = 0;
@@ -154,6 +155,7 @@ Page({
     recommendationModes,
     recommendationMode: "distance",
     parkingScope: "all",
+    mapExpanded: false,
     sheetExpanded: false,
     sheetAnimating: false,
     sheetHeightPx: SHEET_COLLAPSED_HEIGHT,
@@ -231,9 +233,10 @@ Page({
 
     const expandedHeight = Math.max(SHEET_COLLAPSED_HEIGHT, windowHeight - SHEET_MAP_GAP);
     this._sheetCollapsedHeight = SHEET_COLLAPSED_HEIGHT;
+    this._sheetMapExpandedHeight = Math.min(MAP_EXPANDED_SHEET_HEIGHT, SHEET_COLLAPSED_HEIGHT);
     this._sheetExpandedHeight = expandedHeight;
     this._windowHeight = windowHeight;
-    const sheetHeight = this.data.sheetExpanded ? expandedHeight : SHEET_COLLAPSED_HEIGHT;
+    const sheetHeight = this.getCurrentSheetHeight();
     this.setData({
       sheetHeightPx: sheetHeight,
       sheetTranslateY: 0,
@@ -247,8 +250,20 @@ Page({
     return Math.max(0, windowHeight - sheetHeight + MAP_VISIBLE_GAP);
   },
 
+  getCurrentSheetHeight() {
+    if (this.data.sheetExpanded) {
+      return this._sheetExpandedHeight || SHEET_COLLAPSED_HEIGHT;
+    }
+    if (this.data.mapExpanded) {
+      return this._sheetMapExpandedHeight || MAP_EXPANDED_SHEET_HEIGHT;
+    }
+    return this._sheetCollapsedHeight || SHEET_COLLAPSED_HEIGHT;
+  },
+
   setSheetExpanded(expanded) {
-    const sheetHeight = expanded ? this._sheetExpandedHeight : this._sheetCollapsedHeight;
+    const sheetHeight = expanded
+      ? this._sheetExpandedHeight
+      : (this.data.mapExpanded ? this._sheetMapExpandedHeight : this._sheetCollapsedHeight);
     this.setData({
       sheetExpanded: expanded,
       sheetAnimating: true,
@@ -257,6 +272,10 @@ Page({
       mapViewportHeightPx: this.getMapViewportHeight(sheetHeight),
       mapLocateBottomPx: sheetHeight + 24
     });
+    this.finishSheetAnimation();
+  },
+
+  finishSheetAnimation() {
     if (this._sheetAnimationTimer) {
       clearTimeout(this._sheetAnimationTimer);
     }
@@ -280,6 +299,35 @@ Page({
     }
   },
 
+  enterMapMode() {
+    const sheetHeight = this._sheetMapExpandedHeight || MAP_EXPANDED_SHEET_HEIGHT;
+    this.setData({
+      mapExpanded: true,
+      sheetExpanded: false,
+      sheetAnimating: true,
+      showDurationPicker: false,
+      sheetHeightPx: sheetHeight,
+      sheetTranslateY: 0,
+      mapViewportHeightPx: this.getMapViewportHeight(sheetHeight),
+      mapLocateBottomPx: sheetHeight + 24
+    });
+    this.finishSheetAnimation();
+  },
+
+  exitMapMode() {
+    const sheetHeight = this._sheetCollapsedHeight || SHEET_COLLAPSED_HEIGHT;
+    this.setData({
+      mapExpanded: false,
+      sheetExpanded: false,
+      sheetAnimating: true,
+      sheetHeightPx: sheetHeight,
+      sheetTranslateY: 0,
+      mapViewportHeightPx: this.getMapViewportHeight(sheetHeight),
+      mapLocateBottomPx: sheetHeight + 24
+    });
+    this.finishSheetAnimation();
+  },
+
   onSheetTouchStart(event) {
     const touch = event.touches && event.touches[0];
     if (!touch) return;
@@ -295,9 +343,10 @@ Page({
     const touch = event.touches && event.touches[0];
     if (!touch) return;
     const deltaY = touch.clientY - this._sheetDragStartY;
+    const minHeight = this.data.mapExpanded ? this._sheetMapExpandedHeight : this._sheetCollapsedHeight;
     const nextHeight = clampNumber(
       this._sheetDragStartHeight - deltaY,
-      this._sheetCollapsedHeight,
+      minHeight,
       this._sheetExpandedHeight
     );
     this.setData({
@@ -311,11 +360,12 @@ Page({
   onSheetTouchEnd() {
     if (this._sheetDragStartY == null) return;
     const draggedHeight = this.data.sheetHeightPx;
-    const midpoint = (this._sheetExpandedHeight + this._sheetCollapsedHeight) / 2;
+    const collapsedHeight = this.data.mapExpanded ? this._sheetMapExpandedHeight : this._sheetCollapsedHeight;
+    const midpoint = (this._sheetExpandedHeight + collapsedHeight) / 2;
     const didDrag = Math.abs(draggedHeight - this._sheetDragStartHeight) > 4;
     const shouldExpand = this._sheetDragStartExpanded
       ? draggedHeight > this._sheetExpandedHeight - SHEET_DRAG_THRESHOLD
-      : draggedHeight > midpoint || draggedHeight > this._sheetCollapsedHeight + SHEET_DRAG_THRESHOLD;
+      : draggedHeight > midpoint || draggedHeight > collapsedHeight + SHEET_DRAG_THRESHOLD;
     this._sheetDragStartY = null;
     this._sheetDragStartHeight = null;
     this._ignoreNextSheetTap = didDrag;
@@ -487,7 +537,6 @@ Page({
 
   async refreshRecommendations() {
     const destination = app.globalData.destination;
-    this.refreshParkingSearchResults();
     if (!destination) {
       this.markerLotIds = {};
       this._lots = [];
@@ -526,11 +575,7 @@ Page({
       this.setData({ loading: false });
     }
 
-    const keyword = this.data.searchKeyword.trim().toLowerCase();
-    const filteredLots = filterLotsByScope(
-      lots.filter((lot) => this.matchLotKeyword(lot, keyword)),
-      this.data.parkingScope
-    );
+    const filteredLots = filterLotsByScope(lots, this.data.parkingScope);
     const baseRecommendations = recommendParkingLots({
       lots: filteredLots,
       durationMinutes: this.data.durationMinutes,
@@ -627,16 +672,22 @@ Page({
   },
 
   onSearchInput(event) {
-    if (!this.data.sheetExpanded) {
-      this.setSheetExpanded(true);
-    }
-    this.setData({ searchKeyword: event.detail.value });
-    this.refreshRecommendations();
+    const value = event.detail.value;
+    this.setData({
+      searchKeyword: value,
+      destinationKeyword: value
+    });
+    this.refreshDestinationMatches(value);
+    this.expandSheetFromSearch();
   },
 
   clearSearch() {
-    this.setData({ searchKeyword: "", parkingSearchResults: [], hasParkingSearchResults: false });
-    this.refreshRecommendations();
+    this.setData({
+      searchKeyword: "",
+      destinationKeyword: "",
+      destinationMatches: [],
+      hasDestinationMatches: false
+    });
   },
 
   setRecommendationMode(event) {
@@ -647,8 +698,12 @@ Page({
   },
 
   onDestinationInput(event) {
-    this.setData({ destinationKeyword: event.detail.value });
-    this.refreshDestinationMatches(event.detail.value);
+    const value = event.detail.value;
+    this.setData({
+      destinationKeyword: value,
+      searchKeyword: value
+    });
+    this.refreshDestinationMatches(value);
   },
 
   refreshDestinationMatches(keywordValue) {
@@ -700,6 +755,7 @@ Page({
     this.setData({
       destinationMatches: [],
       hasDestinationMatches: false,
+      searchKeyword: destination.name || this.data.searchKeyword || "",
       locationStatusText: setOptions.source === "location" ? "已定位" : "自定义目的地"
     });
     this.applyDestination(destination);

@@ -1,4 +1,4 @@
-<view class="page index-page">
+<view class="page index-page {{mapExpanded ? 'is-map-mode' : ''}} {{sheetExpanded ? 'is-sheet-expanded' : ''}}">
   <map
     class="map-background"
     style="height: {{mapViewportHeightPx}}px;"
@@ -12,30 +12,44 @@
     bindmarkertap="onMarkerTap"
   ></map>
 
-  <view class="map-top-tools">
+  <view wx:if="{{!mapExpanded}}" class="top-action-row compact-top-actions">
+    <view class="account-chip {{accountStatusClass}}" bindtap="login">
+      <text class="account-dot"></text>
+      <text class="account-status">{{accountStatusText}}</text>
+      <text class="account-action">{{accountActionText}}</text>
+    </view>
+    <button class="secondary-button add-button" bindtap="goAdd">分享停车场</button>
+  </view>
+
+  <view wx:if="{{mapExpanded}}" class="map-search-bar">
+    <view class="map-back-button" bindtap="exitMapMode">‹</view>
     <view class="search-shell">
-      <text class="search-prefix">搜</text>
+      <text class="search-prefix">⌕</text>
       <input
         class="map-search-input"
         value="{{searchKeyword}}"
         bindfocus="expandSheetFromSearch"
         bindinput="onSearchInput"
         confirm-type="search"
-        placeholder="输入车场名称"
+        placeholder="搜索目的地"
       />
-      <view class="map-more-button" bindtap="expandSheetFromSearch">...</view>
-    </view>
-    <view class="top-action-row">
-      <view class="account-chip {{accountStatusClass}}" bindtap="login">
-        <text class="account-dot"></text>
-        <text class="account-status">{{accountStatusText}}</text>
-        <text class="account-action">{{accountActionText}}</text>
-      </view>
-      <button class="secondary-button add-button" bindtap="goAdd">分享停车场</button>
+      <view wx:if="{{searchKeyword}}" class="map-more-button" bindtap="clearSearch">×</view>
     </view>
   </view>
 
   <view class="map-action-stack" style="bottom: {{mapLocateBottomPx}}px;">
+    <view
+      wx:if="{{!mapExpanded}}"
+      class="map-round-button expand-map-control"
+      bindtap="enterMapMode"
+      aria-role="button"
+      aria-label="放大地图"
+    >
+      <text class="expand-corner expand-corner-tl"></text>
+      <text class="expand-corner expand-corner-tr"></text>
+      <text class="expand-corner expand-corner-bl"></text>
+      <text class="expand-corner expand-corner-br"></text>
+    </view>
     <view
       class="map-round-button locate-control"
       bindtap="useCurrentLocationAsDestination"
@@ -71,11 +85,11 @@
         catchtouchcancel="onSheetTouchCancel"
       >
         <view class="sheet-grabber"></view>
-        <view class="sheet-summary-row">
+        <view wx:if="{{!mapExpanded}}" class="sheet-summary-row">
           <view class="sheet-summary-main">
             <view class="sheet-title-line">
-              <text class="sheet-title">停车场推荐方案</text>
-              <text class="sheet-caret">{{sheetExpanded ? '下拉收起' : '上拉调整'}}</text>
+              <text class="sheet-title">{{destinationName}}</text>
+              <text class="sheet-caret">{{sheetExpanded ? '下拉收起' : '上拉查看'}}</text>
             </view>
             <text class="sheet-summary">{{summary}}</text>
           </view>
@@ -84,15 +98,23 @@
             <text class="sheet-count-label">个停车场</text>
           </view>
         </view>
-        <view wx:if="{{!sheetExpanded}}" class="quick-summary-grid">
-          <view class="quick-summary-item">
+        <view wx:if="{{!sheetExpanded && !mapExpanded}}" class="quick-summary-grid">
+          <view class="quick-summary-item" bindtap="chooseDestination">
             <text class="quick-label">目的地</text>
             <text class="quick-value">{{destinationName}}</text>
           </view>
-          <view class="quick-summary-item">
+          <view class="quick-summary-item" bindtap="toggleDurationPicker">
             <text class="quick-label">时长</text>
             <text class="quick-value">{{durationText}}</text>
           </view>
+          <view class="quick-summary-item" bindtap="goVehicles">
+            <text class="quick-label">车辆</text>
+            <text class="quick-value">{{currentVehicleText}}</text>
+          </view>
+        </view>
+        <view wx:if="{{mapExpanded && !sheetExpanded}}" class="map-mode-summary">
+          <text class="map-mode-title">{{destinationName}}</text>
+          <text class="map-mode-meta">{{recommendations.length}} 个停车场 · {{durationText}}</text>
         </view>
       </view>
     </view>
@@ -103,17 +125,6 @@
     >
       <view class="sheet-content">
         <view wx:if="{{sheetExpanded}}" class="expanded-controls">
-          <view class="map-meta">
-            <view class="map-meta-main">
-              <view class="location-status-line">
-                <text class="status-dot {{locating ? 'is-locating' : ''}}"></text>
-                <text class="location-status-text">{{locationStatusText}}</text>
-              </view>
-              <text class="destination-name">{{destinationName}}</text>
-              <text class="destination-address">{{destinationAddress}}</text>
-            </view>
-          </view>
-
           <view class="quick-controls expanded-quick-controls">
             <view class="quick-control primary-control" bindtap="chooseDestination">
               <text class="quick-label">目的地</text>
@@ -127,11 +138,6 @@
               <text class="quick-label">车辆</text>
               <text class="quick-value">{{currentVehicleText}}</text>
             </view>
-          </view>
-
-          <view class="main-action-row">
-            <button class="primary-button main-action-button" bindtap="chooseDestination">换目的地</button>
-            <button class="ghost-button main-action-button" bindtap="toggleDurationPicker">调整时长</button>
           </view>
 
           <view wx:if="{{showDurationPicker}}" class="duration-panel">
@@ -187,10 +193,10 @@
             <view class="search-row">
               <input
                 class="search-input"
-                value="{{destinationKeyword}}"
+                value="{{searchKeyword}}"
                 bindinput="onDestinationInput"
                 confirm-type="search"
-                placeholder="输入目的地名称"
+                placeholder="搜索目的地"
               />
               <button class="secondary-button choose-button" bindtap="searchDestinationCandidates">匹配</button>
             </view>
@@ -212,57 +218,12 @@
               </view>
             </view>
 
-            <view class="search-row">
-              <input
-                class="search-input"
-                value="{{searchKeyword}}"
-                bindinput="onSearchInput"
-                confirm-type="search"
-                placeholder="搜索停车场、地址或标签"
-              />
-              <button wx:if="{{searchKeyword}}" class="ghost-button clear-button" bindtap="clearSearch">清空</button>
-            </view>
-
-            <view wx:if="{{hasParkingSearchResults}}" class="search-results-panel">
-              <view class="search-results-header">
-                <text class="match-title">停车场搜索结果</text>
-                <text class="muted">前 {{parkingSearchResults.length}} 条</text>
-              </view>
-              <view
-                wx:for="{{parkingSearchResults}}"
-                wx:key="id"
-                class="parking-result"
-              >
-                <view class="parking-result-main" data-id="{{item.id}}" bindtap="goDetail">
-                  <text class="match-name">{{item.name}}</text>
-                  <text class="match-address">{{item.address}}</text>
-                  <view class="parking-result-meta">
-                    <text>{{item.feeText}}</text>
-                    <text>距目的地 {{item.distanceText}}</text>
-                  </view>
-                </view>
-                <view class="parking-result-actions">
-                  <text data-id="{{item.id}}" bindtap="useLotAsDestination">设目的地</text>
-                  <text data-id="{{item.id}}" bindtap="openNavigation">导航</text>
-                </view>
-              </view>
-            </view>
           </view>
         </view>
 
         <view class="list-header">
-          <text class="section-title">目的地 3km 内</text>
+          <text class="section-title">附近停车场</text>
           <text class="muted">{{recommendations.length}} 个停车场</text>
-        </view>
-
-        <view class="mode-tabs list-mode-tabs">
-          <view
-            wx:for="{{recommendationModes}}"
-            wx:key="value"
-            class="mode-tab {{recommendationMode === item.value ? 'is-active' : ''}}"
-            data-mode="{{item.value}}"
-            bindtap="setRecommendationMode"
-          >{{item.label}}</view>
         </view>
 
         <block wx:if="{{hasRecommendations}}">

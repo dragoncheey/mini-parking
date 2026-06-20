@@ -11,6 +11,7 @@ const { showErrorModal } = require("../../utils/error");
 
 const LOGIN_KEY = "parkingLoginState";
 const CURRENT_USER_KEY = "parkingCurrentUser";
+const EVIDENCE_IMAGE_QUALITY = 70;
 
 const availabilityOptions = [
   { label: "车位较稳", value: "high" },
@@ -80,6 +81,18 @@ function inferMediaType(path) {
 
 function isUnauthorizedError(error) {
   return error && (error.statusCode === 401 || error.code === "UNAUTHORIZED");
+}
+
+function isCloudContainerTransportError(error) {
+  const message = error && (error.errMsg || error.message || "");
+  return message.indexOf("-606001") >= 0 || message.indexOf("callContainer") >= 0;
+}
+
+function getReadableRecognitionError(error) {
+  if (isCloudContainerTransportError(error)) {
+    return "云托管识别请求失败，请确认服务已部署并稍后重试。若照片较大，已自动压缩后再识别。";
+  }
+  return (error && (error.message || error.errMsg)) || "识别接口不可用，请检查网络配置。";
 }
 
 function buildEmptyForm() {
@@ -438,14 +451,22 @@ Page({
     wx.chooseMedia({
       count: 3,
       mediaType: ["image"],
+      sizeType: ["compressed"],
       sourceType: ["camera", "album"],
       camera: "back",
       success: async (res) => {
         const newPhotos = [];
         for (const file of res.tempFiles) {
-          const photo = { path: file.tempFilePath, size: file.size || 0, capturedAt: Date.now() };
+          const localPath = await this.prepareEvidencePhoto(file.tempFilePath);
+          const photo = {
+            path: localPath,
+            originalPath: file.tempFilePath,
+            localPath,
+            size: file.size || 0,
+            capturedAt: Date.now()
+          };
           try {
-            const uploadedUrl = await api.uploadImage(file.tempFilePath);
+            const uploadedUrl = await api.uploadImage(localPath);
             if (uploadedUrl) {
               photo.uploadedUrl = uploadedUrl;
               photo.uploaded = true;
@@ -495,6 +516,20 @@ Page({
       recognitionHint: evidencePhotos.length
         ? "当前已保存照片证据和定位字段。接入 OCR 后可自动回填免费时长、计费单位和价格。"
         : "可拍摄停车场入口或收费牌，再结合定位形成可复核数据源。"
+    });
+  },
+
+  prepareEvidencePhoto(filePath) {
+    if (!wx.compressImage) {
+      return Promise.resolve(filePath);
+    }
+    return new Promise((resolve) => {
+      wx.compressImage({
+        src: filePath,
+        quality: EVIDENCE_IMAGE_QUALITY,
+        success: (res) => resolve(res.tempFilePath || filePath),
+        fail: () => resolve(filePath)
+      });
     });
   },
 
@@ -605,9 +640,11 @@ Page({
       this.applyRecognition(response.recognition);
       wx.showToast({ title: "识别完成", icon: "success" });
     } catch (error) {
+      const recognitionHint = getReadableRecognitionError(error);
+      console.error("Recognition failed:", error);
       this.setData({
         recognitionStatus: "识别失败，待人工复核",
-        recognitionHint: error.message || "识别接口不可用，请检查网络配置。"
+        recognitionHint
       });
       wx.showToast({ title: "识别失败", icon: "none" });
     } finally {

@@ -124,7 +124,8 @@ async function requestWithCloudBase(options) {
       ...buildCloudHeaders(options.header),
       "content-type": "application/json"
     },
-    dataType: "json"
+    dataType: "json",
+    timeout: options.timeout || apiConfig.requestTimeoutMs
   });
 
   return validateOkResponse(response);
@@ -143,7 +144,7 @@ function requestParkingRecognition(payload) {
     url: apiConfig.recognitionApiUrl,
     path: cloudbaseConfig.recognitionPath,
     method: "POST",
-    timeout: apiConfig.requestTimeoutMs,
+    timeout: apiConfig.recognitionTimeoutMs || apiConfig.requestTimeoutMs,
     data: payload
   });
 }

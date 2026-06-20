@@ -1,7 +1,8 @@
 const apiConfig = {
   baseUrl: "http://127.0.0.1:8787",
   recognitionApiUrl: "http://127.0.0.1:8787/api/recognize-parking",
-  requestTimeoutMs: 30000
+  requestTimeoutMs: 30000,
+  recognitionTimeoutMs: 60000
 };
 
 const cloudbaseConfig = {

@@ -405,6 +405,41 @@ async function testApiErrorMetadata() {
   }
 }
 
+async function testCloudbaseRecognitionTimeout() {
+  installWxStorageMock();
+  const originalCloudbaseEnabled = cloudbaseConfig.enabled;
+  cloudbaseConfig.enabled = true;
+  const calls = [];
+  global.wx.cloud = {
+    Cloud: function Cloud() {
+      return {
+        init() {
+          return Promise.resolve();
+        },
+        callContainer(options) {
+          calls.push(options);
+          return Promise.resolve({
+            statusCode: 200,
+            data: { ok: true, recognition: { name: "云托管识别" } }
+          });
+        }
+      };
+    }
+  };
+
+  try {
+    const result = await api.requestParkingRecognition({ photos: [] });
+    assert.strictEqual(result.recognition.name, "云托管识别");
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].path, cloudbaseConfig.recognitionPath);
+    assert.strictEqual(calls[0].header["X-WX-SERVICE"], cloudbaseConfig.serviceName);
+    assert.strictEqual(calls[0].timeout, 60000);
+  } finally {
+    cloudbaseConfig.enabled = originalCloudbaseEnabled;
+    delete global.wx.cloud;
+  }
+}
+
 async function testSenseNovaClient() {
   const calls = [];
   const originalFetch = global.fetch;
@@ -471,6 +506,7 @@ async function run() {
   await testOnlineVehicleStorage();
   testVehicleNormalization();
   await testApiErrorMetadata();
+  await testCloudbaseRecognitionTimeout();
   await testSenseNovaClient();
   console.log("all tests passed");
 }
