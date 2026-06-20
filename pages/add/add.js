@@ -563,8 +563,18 @@ Page({
     });
   },
 
-  requestRecognition(payload) {
-    return requestParkingRecognition(payload);
+  buildRecognitionPhotoRefs(photos) {
+    return photos
+      .filter((photo) => photo && photo.uploadedUrl)
+      .map((photo, index) => ({
+        index,
+        uploadedUrl: photo.uploadedUrl,
+        mediaType: inferMediaType(photo.uploadedUrl || photo.localPath || photo.path)
+      }));
+  },
+
+  requestRecognition(payload, options) {
+    return requestParkingRecognition(payload, options);
   },
 
   applyRecognition(recognition) {
@@ -647,27 +657,30 @@ Page({
 
     const requestId = createRecognitionRequestId();
     try {
+      const selectedPhotos = this.data.evidencePhotos.slice(0, 3);
       console.info("[mini-parking recognition] start", {
         requestId,
-        evidencePhotoCount: this.data.evidencePhotos.length
+        evidencePhotoCount: this.data.evidencePhotos.length,
+        selectedPhotoCount: selectedPhotos.length
       });
-      const photos = await Promise.all(
-        this.data.evidencePhotos.slice(0, 3).map((photo) => this.readPhotoBase64(photo))
-      );
-      console.info("[mini-parking recognition] photos-ready", {
-        requestId,
-        photos: photos.map((photo, index) => ({
-          index,
-          mediaType: photo.mediaType,
-          base64Chars: photo.base64Chars,
-          estimatedBytes: photo.estimatedBytes
-        }))
-      });
-      const response = await this.requestRecognition({
-        photos,
+
+      const photoRefs = this.buildRecognitionPhotoRefs(selectedPhotos);
+      const recognitionPayload = {
         form: this.data.form,
         textHint: this.data.form.notes
-      }, { requestId });
+      };
+
+      if (photoRefs.length !== selectedPhotos.length) {
+        throw new Error("照片上传未完成，请重新拍照/上传后再识别。");
+      }
+
+      recognitionPayload.photoRefs = photoRefs;
+      console.info("[mini-parking recognition] photo-refs-ready", {
+        requestId,
+        photoRefs
+      });
+
+      const response = await this.requestRecognition(recognitionPayload, { requestId });
 
       console.info("[mini-parking recognition] success", {
         requestId,

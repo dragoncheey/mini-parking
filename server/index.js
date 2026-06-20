@@ -75,6 +75,11 @@ function estimateBase64Bytes(base64) {
   return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
 }
 
+function inferMediaTypeFromPath(filePath) {
+  const ext = path.extname(String(filePath || "")).toLowerCase();
+  return MIME_TYPES[ext] || "image/jpeg";
+}
+
 function logServerDebug(event, details) {
   console.info(`[mini-parking server] ${event}`, details || {});
 }
@@ -255,6 +260,28 @@ function safeUploadExtension(filename, mediaType) {
   if (type === "image/gif") return ".gif";
   if (type === "image/bmp") return ".bmp";
   return ".jpg";
+}
+
+function localUploadPathFromUrl(uploadedUrl) {
+  const value = String(uploadedUrl || "");
+  const pathname = value.startsWith("http")
+    ? new URL(value).pathname
+    : value;
+  if (!pathname.startsWith("/uploads/")) {
+    throw new Error("unsupported uploaded image url");
+  }
+  const safeName = path.basename(pathname.slice("/uploads/".length));
+  return path.join(UPLOADS_DIR, safeName);
+}
+
+async function readUploadedPhotoRef(photoRef) {
+  const filePath = localUploadPathFromUrl(photoRef && photoRef.uploadedUrl);
+  const buffer = await fs.promises.readFile(filePath);
+  return {
+    base64: buffer.toString("base64"),
+    mediaType: (photoRef && photoRef.mediaType) || inferMediaTypeFromPath(filePath),
+    uploadedUrl: photoRef && photoRef.uploadedUrl
+  };
 }
 
 async function saveUploadBuffer(buffer, ext) {
@@ -444,19 +471,26 @@ async function handleRecognize(req, res) {
   const startedAt = Date.now();
   const payload = await readJsonBody(req);
   const requestId = getRequestId(req, payload);
-  const photos = Array.isArray(payload.photos) ? payload.photos : [];
+  const directPhotos = Array.isArray(payload.photos) ? payload.photos : [];
+  const photoRefs = Array.isArray(payload.photoRefs) ? payload.photoRefs : [];
   const useMock = process.env.MODEL_API_MOCK === "1"
     || (!process.env.SENSENOVA_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN);
 
   logServerDebug("recognize:start", {
     requestId,
     bodyBytes: payload.__bodyBytes || 0,
-    photoCount: photos.length,
-    photos: photos.map((photo, index) => ({
+    photoCount: directPhotos.length,
+    photoRefCount: photoRefs.length,
+    photos: directPhotos.map((photo, index) => ({
       index,
       mediaType: photo && photo.mediaType,
       base64Chars: photo && photo.base64 ? photo.base64.length : 0,
       estimatedBytes: estimateBase64Bytes(photo && photo.base64)
+    })),
+    photoRefs: photoRefs.map((photo, index) => ({
+      index,
+      uploadedUrl: photo && photo.uploadedUrl,
+      mediaType: photo && photo.mediaType
     })),
     mode: useMock ? "mock" : "model",
     model: useMock ? "mock" : (process.env.SENSENOVA_MODEL || process.env.ANTHROPIC_MODEL || process.env.MODEL_API_MODEL || "sensenova-6.7-flash-lite")
@@ -464,9 +498,28 @@ async function handleRecognize(req, res) {
 
   let recognition;
   try {
+    let photos = directPhotos;
+    if (photoRefs.length) {
+      photos = await Promise.all(photoRefs.slice(0, 3).map(readUploadedPhotoRef));
+      logServerDebug("recognize:photo-refs-loaded", {
+        requestId,
+        photoCount: photos.length,
+        photos: photos.map((photo, index) => ({
+          index,
+          mediaType: photo.mediaType,
+          base64Chars: photo.base64 ? photo.base64.length : 0,
+          estimatedBytes: estimateBase64Bytes(photo.base64),
+          uploadedUrl: photo.uploadedUrl
+        }))
+      });
+    }
+    const recognitionPayload = {
+      ...payload,
+      photos
+    };
     recognition = useMock
-      ? buildMockRecognition(payload)
-      : await recognizeWithSenseNovaApi(payload, process.env, { requestId });
+      ? buildMockRecognition(recognitionPayload)
+      : await recognizeWithSenseNovaApi(recognitionPayload, process.env, { requestId });
   } catch (error) {
     console.error("[mini-parking server] recognize:error", {
       requestId,

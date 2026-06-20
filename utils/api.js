@@ -72,13 +72,20 @@ function estimateBase64Bytes(base64) {
 function summarizeRequestData(path, data) {
   if (path === cloudbaseConfig.recognitionPath) {
     const photos = Array.isArray(data && data.photos) ? data.photos : [];
+    const photoRefs = Array.isArray(data && data.photoRefs) ? data.photoRefs : [];
     return {
       photoCount: photos.length,
+      photoRefCount: photoRefs.length,
       photos: photos.map((photo, index) => ({
         index,
         mediaType: photo && photo.mediaType,
         base64Chars: photo && photo.base64 ? photo.base64.length : 0,
         estimatedBytes: estimateBase64Bytes(photo && photo.base64)
+      })),
+      photoRefs: photoRefs.map((photo, index) => ({
+        index,
+        uploadedUrl: photo && photo.uploadedUrl,
+        mediaType: photo && photo.mediaType
       })),
       textHintLength: data && data.textHint ? String(data.textHint).length : 0
     };

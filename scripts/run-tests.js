@@ -428,12 +428,23 @@ async function testCloudbaseRecognitionTimeout() {
   };
 
   try {
-    const result = await api.requestParkingRecognition({ photos: [] });
+    const result = await api.requestParkingRecognition({
+      photoRefs: [{
+        uploadedUrl: "/uploads/test.jpg",
+        mediaType: "image/jpeg"
+      }]
+    });
     assert.strictEqual(result.recognition.name, "云托管识别");
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0].path, cloudbaseConfig.recognitionPath);
     assert.strictEqual(calls[0].header["X-WX-SERVICE"], cloudbaseConfig.serviceName);
     assert.strictEqual(calls[0].timeout, 60000);
+    assert.deepStrictEqual(calls[0].data.photoRefs, [{
+      uploadedUrl: "/uploads/test.jpg",
+      mediaType: "image/jpeg"
+    }]);
+    assert.strictEqual(calls[0].data.photos, undefined);
+    assert.ok(calls[0].data.requestId);
   } finally {
     cloudbaseConfig.enabled = originalCloudbaseEnabled;
     delete global.wx.cloud;
