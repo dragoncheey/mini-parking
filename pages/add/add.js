@@ -88,11 +88,23 @@ function isCloudContainerTransportError(error) {
   return message.indexOf("-606001") >= 0 || message.indexOf("callContainer") >= 0;
 }
 
+function createRecognitionRequestId() {
+  return `recognition-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function estimateBase64Bytes(base64) {
+  const value = String(base64 || "");
+  if (!value) return 0;
+  const padding = value.endsWith("==") ? 2 : (value.endsWith("=") ? 1 : 0);
+  return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+}
+
 function getReadableRecognitionError(error) {
+  const requestId = error && error.requestId ? `（requestId: ${error.requestId}）` : "";
   if (isCloudContainerTransportError(error)) {
-    return "云托管识别请求失败，请确认服务已部署并稍后重试。若照片较大，已自动压缩后再识别。";
+    return `云托管识别请求失败，请确认服务已部署并稍后重试。若照片较大，已自动压缩后再识别。${requestId}`;
   }
-  return (error && (error.message || error.errMsg)) || "识别接口不可用，请检查网络配置。";
+  return `${(error && (error.message || error.errMsg)) || "识别接口不可用，请检查网络配置。"}${requestId}`;
 }
 
 function buildEmptyForm() {
@@ -539,7 +551,13 @@ Page({
       wx.getFileSystemManager().readFile({
         filePath,
         encoding: "base64",
-        success: (res) => resolve({ base64: res.data, mediaType: inferMediaType(filePath) }),
+        success: (res) => resolve({
+          base64: res.data,
+          mediaType: inferMediaType(filePath),
+          sourcePath: filePath,
+          base64Chars: res.data ? res.data.length : 0,
+          estimatedBytes: estimateBase64Bytes(res.data)
+        }),
         fail: reject
       });
     });
@@ -627,21 +645,48 @@ Page({
       recognitionHint: "正在读取照片并请求识别接口。"
     });
 
+    const requestId = createRecognitionRequestId();
     try {
+      console.info("[mini-parking recognition] start", {
+        requestId,
+        evidencePhotoCount: this.data.evidencePhotos.length
+      });
       const photos = await Promise.all(
         this.data.evidencePhotos.slice(0, 3).map((photo) => this.readPhotoBase64(photo))
       );
+      console.info("[mini-parking recognition] photos-ready", {
+        requestId,
+        photos: photos.map((photo, index) => ({
+          index,
+          mediaType: photo.mediaType,
+          base64Chars: photo.base64Chars,
+          estimatedBytes: photo.estimatedBytes
+        }))
+      });
       const response = await this.requestRecognition({
         photos,
         form: this.data.form,
         textHint: this.data.form.notes
-      });
+      }, { requestId });
 
+      console.info("[mini-parking recognition] success", {
+        requestId,
+        mode: response.mode,
+        hasRecognition: Boolean(response.recognition)
+      });
       this.applyRecognition(response.recognition);
       wx.showToast({ title: "识别完成", icon: "success" });
     } catch (error) {
+      error.requestId = error.requestId || requestId;
       const recognitionHint = getReadableRecognitionError(error);
-      console.error("Recognition failed:", error);
+      console.error("[mini-parking recognition] failed", {
+        requestId,
+        errMsg: error.errMsg,
+        message: error.message,
+        code: error.code,
+        errno: error.errno,
+        statusCode: error.statusCode
+      });
       this.setData({
         recognitionStatus: "识别失败，待人工复核",
         recognitionHint

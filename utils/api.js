@@ -39,6 +39,7 @@ function buildApiError(response, fallback) {
   const error = new Error(data.error || fallback || "接口返回异常");
   error.statusCode = response && response.statusCode;
   error.code = data.code || "";
+  error.requestId = data.requestId || "";
   return error;
 }
 
@@ -57,6 +58,46 @@ function buildCloudHeaders(extraHeaders) {
   };
 }
 
+function createRequestId(prefix) {
+  return `${prefix || "req"}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function estimateBase64Bytes(base64) {
+  const value = String(base64 || "");
+  if (!value) return 0;
+  const padding = value.endsWith("==") ? 2 : (value.endsWith("=") ? 1 : 0);
+  return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+}
+
+function summarizeRequestData(path, data) {
+  if (path === cloudbaseConfig.recognitionPath) {
+    const photos = Array.isArray(data && data.photos) ? data.photos : [];
+    return {
+      photoCount: photos.length,
+      photos: photos.map((photo, index) => ({
+        index,
+        mediaType: photo && photo.mediaType,
+        base64Chars: photo && photo.base64 ? photo.base64.length : 0,
+        estimatedBytes: estimateBase64Bytes(photo && photo.base64)
+      })),
+      textHintLength: data && data.textHint ? String(data.textHint).length : 0
+    };
+  }
+  if (path === "/api/upload") {
+    return {
+      filename: data && data.filename,
+      mediaType: data && data.mediaType,
+      base64Chars: data && data.base64 ? data.base64.length : 0,
+      estimatedBytes: estimateBase64Bytes(data && data.base64)
+    };
+  }
+  return null;
+}
+
+function logApiDebug(message, details) {
+  console.info(`[mini-parking api] ${message}`, details || {});
+}
+
 function buildAuthHeaders(extraHeaders) {
   const token = getToken();
   const header = {
@@ -72,23 +113,58 @@ function buildAuthHeaders(extraHeaders) {
 }
 
 function requestWithWxRequest(options) {
+  const requestId = options.requestId || createRequestId("wxreq");
+  const startedAt = Date.now();
+  const header = {
+    "content-type": "application/json",
+    "X-Request-Id": requestId,
+    ...(options.header || {})
+  };
+  logApiDebug("wx.request:start", {
+    requestId,
+    url: options.url,
+    method: options.method || "POST",
+    timeout: options.timeout,
+    summary: summarizeRequestData(options.path, options.data)
+  });
   return new Promise((resolve, reject) => {
     wx.request({
       url: options.url,
       method: options.method || "POST",
       timeout: options.timeout,
       data: options.data,
-      header: {
-        "content-type": "application/json"
-      },
+      header,
       success: (res) => {
         try {
-          resolve(validateOkResponse(res));
+          const data = validateOkResponse(res);
+          logApiDebug("wx.request:success", {
+            requestId,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - startedAt
+          });
+          resolve(data);
         } catch (error) {
+          error.requestId = error.requestId || requestId;
+          console.error("[mini-parking api] wx.request:bad-response", {
+            requestId,
+            statusCode: res.statusCode,
+            code: error.code,
+            message: error.message,
+            durationMs: Date.now() - startedAt
+          });
           reject(error);
         }
       },
-      fail: reject
+      fail: (error) => {
+        error.requestId = error.requestId || requestId;
+        console.error("[mini-parking api] wx.request:fail", {
+          requestId,
+          errMsg: error.errMsg,
+          message: error.message,
+          durationMs: Date.now() - startedAt
+        });
+        reject(error);
+      }
     });
   });
 }
@@ -116,19 +192,68 @@ function getCloudClient() {
 
 async function requestWithCloudBase(options) {
   const client = await getCloudClient();
-  const response = await client.callContainer({
+  const requestId = options.requestId || createRequestId("cloud");
+  const startedAt = Date.now();
+  const callOptions = {
     path: options.path,
     method: options.method || "POST",
     data: options.data,
     header: {
       ...buildCloudHeaders(options.header),
-      "content-type": "application/json"
+      "content-type": "application/json",
+      "X-Request-Id": requestId
     },
     dataType: "json",
     timeout: options.timeout || apiConfig.requestTimeoutMs
+  };
+
+  logApiDebug("callContainer:start", {
+    requestId,
+    envId: cloudbaseConfig.envId,
+    serviceName: cloudbaseConfig.serviceName,
+    path: callOptions.path,
+    method: callOptions.method,
+    timeout: callOptions.timeout,
+    summary: summarizeRequestData(options.path, options.data)
   });
 
-  return validateOkResponse(response);
+  let response;
+  try {
+    response = await client.callContainer(callOptions);
+  } catch (error) {
+    error.requestId = error.requestId || requestId;
+    console.error("[mini-parking api] callContainer:fail", {
+      requestId,
+      errMsg: error.errMsg,
+      message: error.message,
+      errno: error.errno,
+      code: error.code,
+      durationMs: Date.now() - startedAt
+    });
+    throw error;
+  }
+
+  try {
+    const data = validateOkResponse(response);
+    logApiDebug("callContainer:success", {
+      requestId,
+      statusCode: response.statusCode,
+      durationMs: Date.now() - startedAt,
+      mode: data.mode
+    });
+    return data;
+  } catch (error) {
+    error.requestId = error.requestId || requestId;
+    console.error("[mini-parking api] callContainer:bad-response", {
+      requestId,
+      statusCode: response && response.statusCode,
+      code: error.code,
+      message: error.message,
+      data: response && response.data,
+      durationMs: Date.now() - startedAt
+    });
+    throw error;
+  }
 }
 
 function requestApi(options) {
@@ -139,13 +264,19 @@ function requestApi(options) {
   return requestWithWxRequest(options);
 }
 
-function requestParkingRecognition(payload) {
+function requestParkingRecognition(payload, options) {
+  const opts = options || {};
+  const requestId = opts.requestId || createRequestId("recognition");
   return requestApi({
     url: apiConfig.recognitionApiUrl,
     path: cloudbaseConfig.recognitionPath,
     method: "POST",
     timeout: apiConfig.recognitionTimeoutMs || apiConfig.requestTimeoutMs,
-    data: payload
+    requestId,
+    data: {
+      ...(payload || {}),
+      requestId
+    }
   });
 }
 

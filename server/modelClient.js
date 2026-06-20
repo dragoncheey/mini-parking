@@ -51,7 +51,12 @@ function extractTextFromChatCompletion(data) {
   return String(message.content || "").trim();
 }
 
-async function recognizeWithSenseNovaApi(payload, env) {
+function logModelDebug(event, details) {
+  console.info(`[mini-parking model] ${event}`, details || {});
+}
+
+async function recognizeWithSenseNovaApi(payload, env, options) {
+  const requestId = options && options.requestId;
   const baseUrl = (env.SENSENOVA_BASE_URL || env.ANTHROPIC_BASE_URL || "https://token.sensenova.cn").replace(/\/$/, "");
   const apiBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
   const token = env.SENSENOVA_API_KEY || env.ANTHROPIC_AUTH_TOKEN || "";
@@ -61,7 +66,16 @@ async function recognizeWithSenseNovaApi(payload, env) {
     throw new Error("SENSENOVA_BASE_URL and SENSENOVA_API_KEY are required");
   }
 
-  const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+  const startedAt = Date.now();
+  const url = `${apiBaseUrl}/chat/completions`;
+  logModelDebug("request:start", {
+    requestId,
+    url,
+    model,
+    photoCount: Array.isArray(payload.photos) ? payload.photos.length : 0
+  });
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -90,11 +104,28 @@ async function recognizeWithSenseNovaApi(payload, env) {
   });
 
   const body = await response.text();
+  logModelDebug("request:response", {
+    requestId,
+    status: response.status,
+    ok: response.ok,
+    durationMs: Date.now() - startedAt,
+    bodyChars: body.length
+  });
   if (!response.ok) {
     throw new Error(`model api ${response.status}: ${body.slice(0, 500)}`);
   }
 
-  const data = JSON.parse(body);
+  let data;
+  try {
+    data = JSON.parse(body);
+  } catch (error) {
+    console.error("[mini-parking model] response:invalid-json", {
+      requestId,
+      message: error.message,
+      bodyPreview: body.slice(0, 300)
+    });
+    throw error;
+  }
   const text = extractTextFromChatCompletion(data);
   if (!text) {
     throw new Error("model api returned no text content");

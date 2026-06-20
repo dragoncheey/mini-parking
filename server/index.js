@@ -30,8 +30,8 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
-function sendError(res, statusCode, message, code) {
-  sendJson(res, statusCode, { error: message, code: code || "ERROR" });
+function sendError(res, statusCode, message, code, requestId) {
+  sendJson(res, statusCode, { error: message, code: code || "ERROR", requestId });
 }
 
 function readJsonBody(req) {
@@ -46,7 +46,12 @@ function readJsonBody(req) {
     });
     req.on("end", () => {
       try {
-        resolve(body ? JSON.parse(body) : {});
+        const parsed = body ? JSON.parse(body) : {};
+        Object.defineProperty(parsed, "__bodyBytes", {
+          value: Buffer.byteLength(body),
+          enumerable: false
+        });
+        resolve(parsed);
       } catch (error) {
         reject(new Error("invalid json body"));
       }
@@ -57,6 +62,21 @@ function readJsonBody(req) {
 
 function parseUrl(req) {
   return new URL(req.url, "http://localhost");
+}
+
+function getRequestId(req, body) {
+  return req.headers["x-request-id"] || (body && body.requestId) || crypto.randomUUID();
+}
+
+function estimateBase64Bytes(base64) {
+  const value = String(base64 || "");
+  if (!value) return 0;
+  const padding = value.endsWith("==") ? 2 : (value.endsWith("=") ? 1 : 0);
+  return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+}
+
+function logServerDebug(event, details) {
+  console.info(`[mini-parking server] ${event}`, details || {});
 }
 
 function parsePathParams(pattern, actual) {
@@ -421,15 +441,52 @@ async function handleUpload(req, res) {
 }
 
 async function handleRecognize(req, res) {
+  const startedAt = Date.now();
   const payload = await readJsonBody(req);
+  const requestId = getRequestId(req, payload);
+  const photos = Array.isArray(payload.photos) ? payload.photos : [];
   const useMock = process.env.MODEL_API_MOCK === "1"
     || (!process.env.SENSENOVA_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN);
-  const recognition = useMock
-    ? buildMockRecognition(payload)
-    : await recognizeWithSenseNovaApi(payload, process.env);
+
+  logServerDebug("recognize:start", {
+    requestId,
+    bodyBytes: payload.__bodyBytes || 0,
+    photoCount: photos.length,
+    photos: photos.map((photo, index) => ({
+      index,
+      mediaType: photo && photo.mediaType,
+      base64Chars: photo && photo.base64 ? photo.base64.length : 0,
+      estimatedBytes: estimateBase64Bytes(photo && photo.base64)
+    })),
+    mode: useMock ? "mock" : "model",
+    model: useMock ? "mock" : (process.env.SENSENOVA_MODEL || process.env.ANTHROPIC_MODEL || process.env.MODEL_API_MODEL || "sensenova-6.7-flash-lite")
+  });
+
+  let recognition;
+  try {
+    recognition = useMock
+      ? buildMockRecognition(payload)
+      : await recognizeWithSenseNovaApi(payload, process.env, { requestId });
+  } catch (error) {
+    console.error("[mini-parking server] recognize:error", {
+      requestId,
+      message: error.message,
+      code: error.code,
+      durationMs: Date.now() - startedAt
+    });
+    return sendError(res, 500, error.message || "recognition failed", "RECOGNITION_FAILED", requestId);
+  }
+
+  logServerDebug("recognize:success", {
+    requestId,
+    mode: useMock ? "mock" : "model",
+    durationMs: Date.now() - startedAt,
+    confidence: recognition && recognition.confidence
+  });
 
   sendJson(res, 200, {
     ok: true,
+    requestId,
     mode: useMock ? "mock" : "model",
     recognition
   });
@@ -471,9 +528,11 @@ function serveStaticFile(res, filepath) {
 // ---------------------------------------------------------------------------
 
 const server = http.createServer(async (req, res) => {
+  let pathname = "";
+  let method = req.method;
+  let requestId = req.headers["x-request-id"] || "";
   try {
-    const { pathname } = parseUrl(req);
-    const method = req.method;
+    pathname = parseUrl(req).pathname;
 
     // CORS preflight
     if (method === "OPTIONS") {
@@ -595,19 +654,25 @@ const server = http.createServer(async (req, res) => {
     // 404
     sendError(res, 404, "not found", "NOT_FOUND");
   } catch (err) {
-    console.error("Request error:", err);
+    console.error("[mini-parking server] request:error", {
+      requestId,
+      method,
+      pathname,
+      message: err.message,
+      stack: err.stack
+    });
 
     if (err.message === "request body too large") {
-      return sendError(res, 413, err.message, "BODY_TOO_LARGE");
+      return sendError(res, 413, err.message, "BODY_TOO_LARGE", requestId);
     }
     if (err.message === "invalid json body") {
-      return sendError(res, 400, err.message, "INVALID_JSON");
+      return sendError(res, 400, err.message, "INVALID_JSON", requestId);
     }
     if (err.message.includes("not authorized")) {
-      return sendError(res, 403, err.message, "FORBIDDEN");
+      return sendError(res, 403, err.message, "FORBIDDEN", requestId);
     }
     if (err.message.includes("PLATE_DUPLICATED")) {
-      return sendError(res, 409, "PLATE_DUPLICATED", "PLATE_DUPLICATED");
+      return sendError(res, 409, "PLATE_DUPLICATED", "PLATE_DUPLICATED", requestId);
     }
     if (err.message.includes("Could not find the table")
       || err.message.includes("schema cache")) {
@@ -615,11 +680,12 @@ const server = http.createServer(async (req, res) => {
         res,
         503,
         "database schema is missing; run server/migration.sql in Supabase SQL Editor",
-        "DB_SCHEMA_MISSING"
+        "DB_SCHEMA_MISSING",
+        requestId
       );
     }
 
-    sendError(res, 500, err.message || "internal server error", "INTERNAL_ERROR");
+    sendError(res, 500, err.message || "internal server error", "INTERNAL_ERROR", requestId);
   }
 });
 
