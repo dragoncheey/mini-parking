@@ -37,6 +37,31 @@
   padding: 26rpx;
 }
 
+.form-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 52rpx;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #166a5b;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .login-panel {
   margin-top: 20rpx;
   padding: 34rpx 28rpx;

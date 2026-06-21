@@ -1,4 +1,6 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const { seedParkingLots } = require("../data/seedParking");
 const { calculateParkingFee, calculateParkingFeeForVehicle } = require("../utils/pricing");
 const { recommendParkingLots } = require("../utils/recommendation");
@@ -27,6 +29,10 @@ const {
 } = require("../utils/storage");
 
 const LEGACY_POI_KEY = "amap" + "PoiId";
+
+function readProjectFile(filePath) {
+  return fs.readFileSync(path.join(__dirname, "..", filePath), "utf8");
+}
 
 function testPricing() {
   assert.strictEqual(calculateParkingFee(60, seedParkingLots[0].pricing), 0);
@@ -86,6 +92,31 @@ function testRecommendation() {
   assert.strictEqual(threeHours[0].fee, 10);
   assert.strictEqual(newEnergyThreeHours.find((item) => item.id === "office-half-hour").fee, 6);
   assert.strictEqual(farAway.length, 0);
+}
+
+function testUiLayoutStructure() {
+  const indexWxml = readProjectFile("pages/index/index.wxml");
+  const detailWxml = readProjectFile("pages/detail/detail.wxml");
+  const vehiclesWxml = readProjectFile("pages/vehicles/vehicles.wxml");
+  const addWxml = readProjectFile("pages/add/add.wxml");
+
+  assert.match(indexWxml, /class="workbench-summary/);
+  assert.match(indexWxml, /class="workbench-config-row/);
+  assert.match(indexWxml, /class="first-recommendation-preview/);
+  assert.match(indexWxml, /class="map-top-actions/);
+  assert.match(indexWxml, /class="map-add-action/);
+  assert.doesNotMatch(indexWxml, /compact-top-actions/);
+  assert.strictEqual((indexWxml.match(/class="quick-control/g) || []).length, 0);
+  assert.strictEqual((indexWxml.match(/class="quick-summary-item/g) || []).length, 3);
+
+  assert.match(detailWxml, /class="detail-hero/);
+  assert.match(detailWxml, /class="detail-primary-panel/);
+
+  assert.match(vehiclesWxml, /class="vehicles-header/);
+  assert.match(vehiclesWxml, /class="vehicle-card-main/);
+
+  assert.match(addWxml, /class="form-step/);
+  assert.match(addWxml, /class="step-number/);
 }
 
 function testRecognitionParsing() {
@@ -716,6 +747,7 @@ async function testSenseNovaClient() {
 async function run() {
   testPricing();
   testRecommendation();
+  testUiLayoutStructure();
   testRecognitionParsing();
   testServerAuthHelpers();
   testTokenRequiredLoginState();

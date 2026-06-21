@@ -12,13 +12,19 @@
     bindmarkertap="onMarkerTap"
   ></map>
 
-  <view wx:if="{{!mapExpanded}}" class="top-action-row compact-top-actions">
-    <view class="account-chip {{accountStatusClass}}" bindtap="login">
+  <view wx:if="{{!mapExpanded}}" class="map-top-actions">
+    <view class="map-account-chip {{accountStatusClass}}" bindtap="login">
       <text class="account-dot"></text>
       <text class="account-status">{{accountStatusText}}</text>
       <text class="account-action">{{accountActionText}}</text>
     </view>
-    <button class="secondary-button add-button" bindtap="goAdd">分享停车场</button>
+    <button
+      class="map-add-action"
+      bindtap="goAdd"
+      aria-label="分享停车场"
+    >
+      <text class="map-add-plus">+</text>
+    </button>
   </view>
 
   <view wx:if="{{mapExpanded}}" class="map-search-bar">
@@ -85,7 +91,7 @@
         catchtouchcancel="onSheetTouchCancel"
       >
         <view class="sheet-grabber"></view>
-        <view wx:if="{{!mapExpanded}}" class="sheet-summary-row">
+        <view wx:if="{{!mapExpanded}}" class="workbench-summary sheet-summary-row">
           <view class="sheet-summary-main">
             <view class="sheet-title-line">
               <text class="sheet-title">{{destinationName}}</text>
@@ -98,7 +104,7 @@
             <text class="sheet-count-label">个停车场</text>
           </view>
         </view>
-        <view wx:if="{{!sheetExpanded && !mapExpanded}}" class="quick-summary-grid">
+        <view wx:if="{{!sheetExpanded && !mapExpanded}}" class="workbench-config-row quick-summary-grid">
           <view class="quick-summary-item" bindtap="chooseDestination">
             <text class="quick-label">目的地</text>
             <text class="quick-value">{{destinationName}}</text>
@@ -112,6 +118,26 @@
             <text class="quick-value">{{currentVehicleText}}</text>
           </view>
         </view>
+        <block wx:if="{{!sheetExpanded && !mapExpanded && hasRecommendations}}">
+          <view
+            wx:for="{{recommendations}}"
+            wx:key="id"
+            wx:if="{{index === 0}}"
+            class="first-recommendation-preview"
+            data-id="{{item.id}}"
+            catchtap="goDetail"
+          >
+            <view class="preview-rank">{{item.rank}}</view>
+            <view class="preview-main">
+              <text class="preview-name">{{item.name}}</text>
+              <text class="preview-meta">{{item.distanceText}} · 步行约 {{item.walkingMinutes}} 分钟 · {{item.availabilityText}}</text>
+            </view>
+            <view class="preview-price">
+              <text class="preview-fee">{{item.feeText}}</text>
+              <text class="preview-note">{{item.durationText}}</text>
+            </view>
+          </view>
+        </block>
         <view wx:if="{{mapExpanded && !sheetExpanded}}" class="map-mode-summary">
           <text class="map-mode-title">{{destinationName}}</text>
           <text class="map-mode-meta">{{recommendations.length}} 个停车场 · {{durationText}}</text>
@@ -125,16 +151,16 @@
     >
       <view class="sheet-content">
         <view wx:if="{{sheetExpanded}}" class="expanded-controls">
-          <view class="quick-controls expanded-quick-controls">
-            <view class="quick-control primary-control" bindtap="chooseDestination">
+          <view class="expanded-control-row">
+            <view class="config-control primary-control" bindtap="chooseDestination">
               <text class="quick-label">目的地</text>
               <text class="quick-value">{{destinationName}}</text>
             </view>
-            <view class="quick-control primary-control" bindtap="toggleDurationPicker">
+            <view class="config-control primary-control" bindtap="toggleDurationPicker">
               <text class="quick-label">时长</text>
               <text class="quick-value">{{durationText}}</text>
             </view>
-            <view class="quick-control" bindtap="goVehicles">
+            <view class="config-control" bindtap="goVehicles">
               <text class="quick-label">车辆</text>
               <text class="quick-value">{{currentVehicleText}}</text>
             </view>

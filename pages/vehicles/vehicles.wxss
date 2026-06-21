@@ -4,6 +4,33 @@
   background: #f5f7f9;
 }
 
+.vehicles-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 10rpx 0 4rpx;
+}
+
+.vehicles-kicker,
+.vehicles-title {
+  display: block;
+}
+
+.vehicles-kicker {
+  color: #166a5b;
+  font-size: 22rpx;
+  font-weight: 900;
+}
+
+.vehicles-title {
+  margin-top: 8rpx;
+  color: #111827;
+  font-size: 42rpx;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
 .login-panel,
 .current-card,
 .vehicle-card {
@@ -84,7 +111,7 @@
   margin-top: 18rpx;
   padding: 24rpx 32rpx;
   overflow: hidden;
-  background: linear-gradient(135deg, #ffffff 0%, #eef8f5 100%);
+  background: #ffffff;
 }
 
 .vehicle-card.is-new-energy::after,
@@ -105,11 +132,17 @@
   box-shadow: 0 12rpx 34rpx rgba(22, 106, 91, 0.1);
 }
 
+.vehicle-card-main {
+  position: relative;
+  z-index: 1;
+}
+
 .vehicle-card-head {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 18rpx;
 }
 
@@ -139,6 +172,16 @@
   background: #dff3ef;
   font-size: 24rpx;
   font-weight: 800;
+}
+
+.current-badge {
+  flex: 0 0 auto;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  color: #166a5b;
+  background: #e4f3ef;
+  font-size: 22rpx;
+  font-weight: 900;
 }
 
 .vehicle-meta {
