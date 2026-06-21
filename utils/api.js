@@ -197,6 +197,10 @@ function getCloudClient() {
   return cloudClientPromise;
 }
 
+function resetCloudClientForTests() {
+  cloudClientPromise = null;
+}
+
 async function requestWithCloudBase(options) {
   const client = await getCloudClient();
   const requestId = options.requestId || createRequestId("cloud");
@@ -512,34 +516,68 @@ function readFileAsBase64(filePath) {
   });
 }
 
+function readFileAsArrayBuffer(filePath) {
+  return new Promise((resolve, reject) => {
+    wx.getFileSystemManager().readFile({
+      filePath,
+      success(res) {
+        resolve(res.data);
+      },
+      fail(err) {
+        reject(new Error(err.errMsg || "图片读取失败"));
+      }
+    });
+  });
+}
+
 async function uploadImage(filePath, options) {
-  const path = "/api/upload";
   const opts = options || {};
   const requestId = opts.requestId || createRequestId("upload");
 
   if (cloudbaseConfig.enabled) {
-    const base64 = await readFileAsBase64(filePath);
-    logApiDebug("upload:cloud-start", {
+    const filename = getFilename(filePath);
+    const mediaType = inferMediaType(filePath);
+    logApiDebug("upload:cloud-token-start", {
       requestId,
-      filename: getFilename(filePath),
-      mediaType: inferMediaType(filePath),
-      base64Chars: base64 ? base64.length : 0,
-      estimatedBytes: estimateBase64Bytes(base64)
+      filename,
+      mediaType
     });
-    const res = await request("POST", path, {
-      filename: getFilename(filePath),
-      mediaType: inferMediaType(filePath),
-      base64
+
+    const tokenResult = await request("POST", "/api/upload-token", {
+      filename,
+      mediaType
     }, { requestId });
-    logApiDebug("upload:cloud-success", {
+
+    if (!tokenResult || !tokenResult.signedUrl || !tokenResult.uploadedUrl) {
+      const error = new Error("图片上传失败：上传凭证无效。");
+      error.requestId = requestId;
+      throw error;
+    }
+
+    logApiDebug("upload:cloud-direct-start", {
       requestId,
-      uploadedUrl: res && (res.uploadedUrl || res.url),
-      storageBucket: res && res.storageBucket,
-      storagePath: res && res.storagePath
+      storageBucket: tokenResult.storageBucket,
+      storagePath: tokenResult.storagePath
     });
-    return res;
+
+    await uploadFileToSignedUrl({
+      requestId,
+      filePath,
+      signedUrl: tokenResult.signedUrl,
+      mediaType,
+      timeout: opts.timeout || apiConfig.requestTimeoutMs
+    });
+
+    logApiDebug("upload:cloud-direct-success", {
+      requestId,
+      uploadedUrl: tokenResult.uploadedUrl,
+      storageBucket: tokenResult.storageBucket,
+      storagePath: tokenResult.storagePath
+    });
+    return tokenResult;
   }
 
+  const path = "/api/upload";
   const baseUrl = apiConfig.baseUrl || "http://127.0.0.1:8787";
   const url = baseUrl + path;
   const token = getToken();
@@ -613,6 +651,45 @@ async function uploadImage(filePath, options) {
   });
 }
 
+function uploadFileToSignedUrl({ requestId, filePath, signedUrl, mediaType, timeout }) {
+  return readFileAsArrayBuffer(filePath).then((fileBuffer) => new Promise((resolve, reject) => {
+    wx.request({
+      url: signedUrl,
+      method: "PUT",
+      data: fileBuffer,
+      header: {
+        "content-type": mediaType || "image/jpeg",
+        "cache-control": "max-age=3600"
+      },
+      timeout,
+      success(res) {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(res);
+          return;
+        }
+        const error = new Error("Supabase 图片直传失败");
+        error.statusCode = res.statusCode;
+        error.requestId = requestId;
+        console.error("[mini-parking api] upload:cloud-direct-bad-response", {
+          requestId,
+          statusCode: res.statusCode,
+          data: res.data
+        });
+        reject(error);
+      },
+      fail(err) {
+        const error = new Error(err.errMsg || "Supabase 图片直传失败");
+        error.requestId = requestId;
+        console.error("[mini-parking api] upload:cloud-direct-fail", {
+          requestId,
+          errMsg: err.errMsg
+        });
+        reject(error);
+      }
+    });
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -621,6 +698,7 @@ module.exports = {
   // Existing exports
   requestApi,
   requestParkingRecognition,
+  resetCloudClientForTests,
   // Token management
   getToken,
   setToken,

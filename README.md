@@ -94,13 +94,14 @@ const cloudbaseConfig = {
   enabled: true,
   envId: "你的云开发环境 ID",
   serviceName: "mini-parking-api",
-  recognitionPath: "/api/recognize-parking"
+  recognitionPath: "/api/recognize-parking",
+  supabaseUrl: "你的 Supabase Project URL"
 };
 ```
 
 小程序端会通过 `wx.cloud.callContainer` 访问云托管，并带上 `X-WX-SERVICE` 服务名。更完整的部署步骤见 `docs/cloudbase-run.md`。
 
-`cloudbaseConfig.enabled` 打开后，登录、停车场、车辆、投票、JSON/base64 图片上传和识别都会走同一个云托管容器。本地开发时保持 `enabled: false` 即可继续使用 `wx.request` / `wx.uploadFile` 请求本地 `127.0.0.1:8787`。上传接口仍由后端接收图片，再使用 `SUPABASE_SERVICE_KEY` 写入 Supabase Storage；可用 `SUPABASE_STORAGE_BUCKET` 覆盖默认 bucket 名。
+`cloudbaseConfig.enabled` 打开后，登录、停车场、车辆、投票和识别都会走同一个云托管容器。本地开发时保持 `enabled: false` 即可继续使用 `wx.request` / `wx.uploadFile` 请求本地 `127.0.0.1:8787`。云端图片上传采用两段式：小程序先向云托管请求 `/api/upload-token` 获取 Supabase Storage signed upload URL，再用 `wx.request` PUT 直传 Supabase，避免大图 base64 触发 `cloud.callContainer -606001`。微信公众平台需要把 Supabase 项目域名加入 request 合法域名，例如 `https://dnwmoojwvosyfnlgsfmk.supabase.co`。服务端仍用 `SUPABASE_SERVICE_KEY` 创建上传凭证和读取图片；可用 `SUPABASE_STORAGE_BUCKET` 覆盖默认 bucket 名。
 
 ## 数据模型
 

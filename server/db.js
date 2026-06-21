@@ -129,6 +129,30 @@ async function uploadEvidencePhoto({ buffer, filename, mediaType }) {
   };
 }
 
+async function createEvidencePhotoUploadToken({ filename, mediaType }) {
+  const bucketName = await ensureStorageBucket();
+  const objectPath = buildEvidenceObjectPath(filename, mediaType);
+  const supabase = getSupabase();
+  const { data, error } = await supabase.storage
+    .from(bucketName)
+    .createSignedUploadUrl(objectPath, { upsert: false });
+
+  if (error) {
+    throw new Error(`create signed upload url failed: ${error.message}`);
+  }
+
+  const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(objectPath);
+  return {
+    signedUrl: data.signedUrl,
+    uploadToken: data.token,
+    url: publicData.publicUrl,
+    uploadedUrl: publicData.publicUrl,
+    storageBucket: bucketName,
+    storagePath: objectPath,
+    mediaType: mediaType || "image/jpeg"
+  };
+}
+
 async function downloadEvidencePhoto(bucketName, objectPath) {
   const supabase = getSupabase();
   const bucket = bucketName || getStorageBucketName();
@@ -661,6 +685,7 @@ module.exports = {
   updateVehicle,
   deleteVehicle,
   uploadEvidencePhoto,
+  createEvidencePhotoUploadToken,
   downloadEvidencePhoto,
   getStorageBucketName,
   resetSupabaseForTests,

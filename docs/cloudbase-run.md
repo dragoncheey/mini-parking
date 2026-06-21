@@ -51,6 +51,12 @@ MODEL_API_MOCK=1
 
 Supabase 需要先执行 `server/migration.sql` 建表。图片证据会上传到 Supabase Storage，默认 bucket 为 `parking-evidence`；服务端会用 service role 自动创建公开 bucket，也可以在 Supabase 控制台提前创建。
 
+云端图片上传不是把大图 base64 发进云托管。小程序会先调用云托管 `/api/upload-token` 获取 Supabase Storage signed upload URL，再用 `wx.request` PUT 直传 Supabase。这样可以避开 `cloud.callContainer -606001` 这类大请求网关错误。微信公众平台后台需要把 Supabase 项目域名加入 request 合法域名，例如：
+
+```text
+https://dnwmoojwvosyfnlgsfmk.supabase.co
+```
+
 如需示例数据，可在本地或一次性任务中设置同样的 Supabase 环境变量后执行：
 
 ```bash
@@ -66,11 +72,12 @@ const cloudbaseConfig = {
   enabled: true,
   envId: "你的云开发环境 ID",
   serviceName: "mini-parking-api",
-  recognitionPath: "/api/recognize-parking"
+  recognitionPath: "/api/recognize-parking",
+  supabaseUrl: "你的 Supabase Project URL"
 };
 ```
 
-本地开发时把 `enabled` 改回 `false`，小程序会继续请求 `http://127.0.0.1:8787`。`enabled: true` 时，登录、停车场、车辆、投票、JSON/base64 图片上传和识别接口都会通过 `wx.cloud.callContainer` 进入云托管，并携带 `X-WX-SERVICE: mini-parking-api`。
+本地开发时把 `enabled` 改回 `false`，小程序会继续请求 `http://127.0.0.1:8787`。`enabled: true` 时，登录、停车场、车辆、投票、上传凭证和识别接口都会通过 `wx.cloud.callContainer` 进入云托管，并携带 `X-WX-SERVICE: mini-parking-api`；图片文件本体会通过 signed URL 直传 Supabase。
 
 ## 4. 验证
 

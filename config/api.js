@@ -9,7 +9,8 @@ const cloudbaseConfig = {
   enabled: true,
   envId: "prod-d0g1zp7w0322a5d42",
   serviceName: "mini-parking-api",
-  recognitionPath: "/api/recognize-parking"
+  recognitionPath: "/api/recognize-parking",
+  supabaseUrl: "https://dnwmoojwvosyfnlgsfmk.supabase.co"
 };
 
 module.exports = {

@@ -530,6 +530,37 @@ async function handleUpload(req, res) {
   sendJson(res, 201, upload);
 }
 
+async function handleUploadToken(req, res) {
+  const startedAt = Date.now();
+  const body = await readJsonBody(req);
+  const requestId = getRequestId(req, body);
+  const { filename, mediaType } = body;
+  logServerDebug("upload-token:start", {
+    requestId,
+    bodyBytes: body.__bodyBytes || 0,
+    filename,
+    mediaType
+  });
+
+  if (!filename) {
+    return sendError(res, 400, "filename is required", "MISSING_FILENAME", requestId);
+  }
+
+  const token = await db.createEvidencePhotoUploadToken({
+    filename,
+    mediaType
+  });
+
+  logServerDebug("upload-token:success", {
+    requestId,
+    durationMs: Date.now() - startedAt,
+    storageBucket: token.storageBucket,
+    storagePath: token.storagePath,
+    uploadedUrl: token.uploadedUrl
+  });
+  sendJson(res, 201, token);
+}
+
 async function handleRecognize(req, res) {
   const startedAt = Date.now();
   const payload = await readJsonBody(req);
@@ -664,7 +695,7 @@ const server = http.createServer(async (req, res) => {
         routes: ["/health", "/api/recognize-parking", "/api/login",
           "/api/parking-lots", "/api/parking-lots/:id",
           "/api/parking-lots/:id/vote", "/api/vehicles",
-          "/api/vehicles/:id", "/api/upload"]
+          "/api/vehicles/:id", "/api/upload", "/api/upload-token"]
       });
       return;
     }
@@ -764,6 +795,12 @@ const server = http.createServer(async (req, res) => {
     // POST /api/upload (auth required)
     if (method === "POST" && pathname === "/api/upload") {
       await handleUpload(req, res);
+      return;
+    }
+
+    // POST /api/upload-token (auth required)
+    if (method === "POST" && pathname === "/api/upload-token") {
+      await handleUploadToken(req, res);
       return;
     }
 

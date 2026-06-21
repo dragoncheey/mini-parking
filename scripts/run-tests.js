@@ -448,7 +448,71 @@ async function testCloudbaseRecognitionTimeout() {
     assert.ok(calls[0].data.requestId);
   } finally {
     cloudbaseConfig.enabled = originalCloudbaseEnabled;
+    api.resetCloudClientForTests();
     delete global.wx.cloud;
+  }
+}
+
+async function testCloudbaseUploadUsesSignedSupabaseUpload() {
+  installWxStorageMock();
+  const originalCloudbaseEnabled = cloudbaseConfig.enabled;
+  cloudbaseConfig.enabled = true;
+  const containerCalls = [];
+  const requestCalls = [];
+  global.wx.cloud = {
+    Cloud: function Cloud() {
+      return {
+        init() {
+          return Promise.resolve();
+        },
+        callContainer(options) {
+          containerCalls.push(options);
+          return Promise.resolve({
+            statusCode: 200,
+            data: {
+              uploadedUrl: "https://example.supabase.co/storage/v1/object/public/parking-evidence/evidence/photo.jpg",
+              storageBucket: "parking-evidence",
+              storagePath: "evidence/photo.jpg",
+              signedUrl: "https://example.supabase.co/storage/v1/object/upload/sign/parking-evidence/evidence/photo.jpg?token=abc"
+            }
+          });
+        }
+      };
+    }
+  };
+  global.wx.getFileSystemManager = () => ({
+    readFile(options) {
+      assert.strictEqual(options.filePath, "/tmp/local-photo.jpg");
+      options.success({ data: Buffer.from("jpg") });
+    }
+  });
+  global.wx.request = (options) => {
+    requestCalls.push(options);
+    options.success({
+      statusCode: 200,
+      data: { Key: "parking-evidence/evidence/photo.jpg" }
+    });
+  };
+
+  try {
+    const result = await api.uploadImage("/tmp/local-photo.jpg");
+    assert.strictEqual(containerCalls.length, 1);
+    assert.strictEqual(containerCalls[0].path, "/api/upload-token");
+    assert.strictEqual(containerCalls[0].data.base64, undefined);
+    assert.strictEqual(containerCalls[0].data.filename, "local-photo.jpg");
+    assert.strictEqual(requestCalls.length, 1);
+    assert.strictEqual(requestCalls[0].url, "https://example.supabase.co/storage/v1/object/upload/sign/parking-evidence/evidence/photo.jpg?token=abc");
+    assert.strictEqual(requestCalls[0].method, "PUT");
+    assert.strictEqual(requestCalls[0].data.toString("utf8"), "jpg");
+    assert.strictEqual(requestCalls[0].header["content-type"], "image/jpeg");
+    assert.strictEqual(requestCalls[0].header["cache-control"], "max-age=3600");
+    assert.strictEqual(result.uploadedUrl, "https://example.supabase.co/storage/v1/object/public/parking-evidence/evidence/photo.jpg");
+    assert.strictEqual(result.storagePath, "evidence/photo.jpg");
+  } finally {
+    cloudbaseConfig.enabled = originalCloudbaseEnabled;
+    api.resetCloudClientForTests();
+    delete global.wx.cloud;
+    delete global.wx.request;
   }
 }
 
@@ -660,6 +724,7 @@ async function run() {
   testVehicleNormalization();
   await testApiErrorMetadata();
   await testCloudbaseRecognitionTimeout();
+  await testCloudbaseUploadUsesSignedSupabaseUpload();
   await testAddPageRetriesPhotoUploadBeforeRecognition();
   await testSupabaseStorageUpload();
   await testSenseNovaClient();
