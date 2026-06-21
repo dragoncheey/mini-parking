@@ -460,7 +460,7 @@ async function uploadImage(filePath) {
       mediaType: inferMediaType(filePath),
       base64
     });
-    return res.url || "";
+    return res;
   }
 
   const baseUrl = apiConfig.baseUrl || "http://127.0.0.1:8787";
@@ -482,7 +482,7 @@ async function uploadImage(filePath) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
             const data = JSON.parse(res.data);
-            resolve(data.url || "");
+            resolve(data);
           } catch (e) {
             reject(new Error("上传响应解析失败"));
           }

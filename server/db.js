@@ -1,10 +1,15 @@
 const { createClient } = require("@supabase/supabase-js");
+const crypto = require("crypto");
+const path = require("path");
 
 // ---------------------------------------------------------------------------
 // Supabase client singleton
 // ---------------------------------------------------------------------------
 
 let _supabase = null;
+let _storageBucketReady = null;
+
+const DEFAULT_STORAGE_BUCKET = "parking-evidence";
 
 function getSupabase() {
   if (!_supabase) {
@@ -22,6 +27,117 @@ function getSupabase() {
     });
   }
   return _supabase;
+}
+
+function getStorageBucketName() {
+  return process.env.SUPABASE_STORAGE_BUCKET || DEFAULT_STORAGE_BUCKET;
+}
+
+function resetSupabaseForTests(client) {
+  _supabase = client || null;
+  _storageBucketReady = null;
+}
+
+async function ensureStorageBucket() {
+  if (_storageBucketReady) return _storageBucketReady;
+
+  _storageBucketReady = (async () => {
+    const supabase = getSupabase();
+    const bucketName = getStorageBucketName();
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+    if (listError) {
+      throw new Error(`list storage buckets failed: ${listError.message}`);
+    }
+
+    const existing = (buckets || []).find((bucket) => bucket.name === bucketName);
+    const bucketOptions = {
+      public: true,
+      fileSizeLimit: "10MB",
+      allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    };
+    if (!existing) {
+      const { error: createError } = await supabase.storage.createBucket(bucketName, {
+        ...bucketOptions
+      });
+      if (createError) {
+        throw new Error(`create storage bucket failed: ${createError.message}`);
+      }
+    } else if (!existing.public) {
+      const { error: updateError } = await supabase.storage.updateBucket(bucketName, {
+        ...bucketOptions
+      });
+      if (updateError) {
+        throw new Error(`update storage bucket failed: ${updateError.message}`);
+      }
+    }
+
+    return bucketName;
+  })();
+
+  try {
+    return await _storageBucketReady;
+  } catch (error) {
+    _storageBucketReady = null;
+    throw error;
+  }
+}
+
+function safeStorageExtension(filename, mediaType) {
+  const fromName = path.extname(String(filename || "")).toLowerCase();
+  if ([".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(fromName)) {
+    return fromName === ".jpeg" ? ".jpg" : fromName;
+  }
+
+  const type = String(mediaType || "").toLowerCase();
+  if (type === "image/png") return ".png";
+  if (type === "image/webp") return ".webp";
+  if (type === "image/gif") return ".gif";
+  return ".jpg";
+}
+
+function buildEvidenceObjectPath(filename, mediaType) {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = `${now.getUTCMonth() + 1}`.padStart(2, "0");
+  const random = crypto.randomBytes(8).toString("hex");
+  const ext = safeStorageExtension(filename, mediaType);
+  return `evidence/${year}/${month}/${Date.now()}-${random}${ext}`;
+}
+
+async function uploadEvidencePhoto({ buffer, filename, mediaType }) {
+  const bucketName = await ensureStorageBucket();
+  const objectPath = buildEvidenceObjectPath(filename, mediaType);
+  const contentType = mediaType || "image/jpeg";
+  const supabase = getSupabase();
+  const { error } = await supabase.storage
+    .from(bucketName)
+    .upload(objectPath, buffer, {
+      contentType,
+      upsert: false
+    });
+
+  if (error) {
+    throw new Error(`upload evidence photo failed: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(bucketName).getPublicUrl(objectPath);
+  return {
+    url: data.publicUrl,
+    uploadedUrl: data.publicUrl,
+    storageBucket: bucketName,
+    storagePath: objectPath
+  };
+}
+
+async function downloadEvidencePhoto(bucketName, objectPath) {
+  const supabase = getSupabase();
+  const bucket = bucketName || getStorageBucketName();
+  const { data, error } = await supabase.storage.from(bucket).download(objectPath);
+  if (error) {
+    throw new Error(`download evidence photo failed: ${error.message}`);
+  }
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +184,7 @@ function normalizeEvidencePhotos(value) {
     if (typeof photo === "string") {
       return {
         path: photo,
+        uploadedUrl: photo,
         uploaded: true
       };
     }
@@ -543,6 +660,10 @@ module.exports = {
   addVehicle,
   updateVehicle,
   deleteVehicle,
+  uploadEvidencePhoto,
+  downloadEvidencePhoto,
+  getStorageBucketName,
+  resetSupabaseForTests,
   // Exposed for seed script and direct access if needed
   getSupabase,
   computeCredibility,

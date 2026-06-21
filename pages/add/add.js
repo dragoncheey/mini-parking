@@ -478,9 +478,12 @@ Page({
             capturedAt: Date.now()
           };
           try {
-            const uploadedUrl = await api.uploadImage(localPath);
+            const upload = await api.uploadImage(localPath);
+            const uploadedUrl = upload && (upload.uploadedUrl || upload.url);
             if (uploadedUrl) {
               photo.uploadedUrl = uploadedUrl;
+              photo.storageBucket = upload.storageBucket || "";
+              photo.storagePath = upload.storagePath || "";
               photo.uploaded = true;
             }
           } catch (e) {
@@ -569,6 +572,8 @@ Page({
       .map((photo, index) => ({
         index,
         uploadedUrl: photo.uploadedUrl,
+        storageBucket: photo.storageBucket || "",
+        storagePath: photo.storagePath || "",
         mediaType: inferMediaType(photo.uploadedUrl || photo.localPath || photo.path)
       }));
   },
@@ -792,7 +797,18 @@ Page({
       }
     }
 
-    const evidencePhotos = this.data.evidencePhotos.map((photo) => photo.uploadedUrl || photo.path);
+    const evidencePhotos = this.data.evidencePhotos.map((photo) => {
+      if (photo.uploadedUrl) {
+        return {
+          path: photo.uploadedUrl,
+          uploadedUrl: photo.uploadedUrl,
+          storageBucket: photo.storageBucket || "",
+          storagePath: photo.storagePath || "",
+          uploaded: true
+        };
+      }
+      return photo.path;
+    });
 
     return {
       name: form.name.trim(),

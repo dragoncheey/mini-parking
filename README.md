@@ -61,7 +61,7 @@ npm run dev:api
 - `POST /api/parking-lots`、`PUT /api/parking-lots/:id`：上报和维护停车场。
 - `POST /api/parking-lots/:id/vote`：点赞/踩。
 - `GET /api/vehicles`、`POST /api/vehicles`、`DELETE /api/vehicles/:id`：车辆管理。
-- `POST /api/upload`：图片上传；本地支持 `wx.uploadFile`，云托管模式支持 JSON/base64 上传。
+- `POST /api/upload`：图片上传；服务端写入 Supabase Storage，默认 bucket 为 `parking-evidence`。
 - `POST /api/recognize-parking`：停车场照片和文本识别。
 
 数据库表结构在 `server/migration.sql`，执行后可用 `node server/seed.js` 导入示例停车场。
@@ -100,7 +100,7 @@ const cloudbaseConfig = {
 
 小程序端会通过 `wx.cloud.callContainer` 访问云托管，并带上 `X-WX-SERVICE` 服务名。更完整的部署步骤见 `docs/cloudbase-run.md`。
 
-`cloudbaseConfig.enabled` 打开后，登录、停车场、车辆、投票、JSON/base64 图片上传和识别都会走同一个云托管容器。本地开发时保持 `enabled: false` 即可继续使用 `wx.request` / `wx.uploadFile` 请求本地 `127.0.0.1:8787`。
+`cloudbaseConfig.enabled` 打开后，登录、停车场、车辆、投票、JSON/base64 图片上传和识别都会走同一个云托管容器。本地开发时保持 `enabled: false` 即可继续使用 `wx.request` / `wx.uploadFile` 请求本地 `127.0.0.1:8787`。上传接口仍由后端接收图片，再使用 `SUPABASE_SERVICE_KEY` 写入 Supabase Storage；可用 `SUPABASE_STORAGE_BUCKET` 覆盖默认 bucket 名。
 
 ## 数据模型
 

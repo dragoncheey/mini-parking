@@ -6,6 +6,7 @@ const { buildMockRecognition, normalizeRecognition, parseJsonFromText } = requir
 const { recognizeWithSenseNovaApi } = require("../server/modelClient");
 const { extractCloudOpenid, extractOpenid, generateToken } = require("../server/auth");
 const { cloudbaseConfig } = require("../config/api");
+const db = require("../server/db");
 const api = require("../utils/api");
 const {
   asyncAddVehicle,
@@ -451,6 +452,67 @@ async function testCloudbaseRecognitionTimeout() {
   }
 }
 
+async function testSupabaseStorageUpload() {
+  const originalBucket = process.env.SUPABASE_STORAGE_BUCKET;
+  process.env.SUPABASE_STORAGE_BUCKET = "test-evidence";
+  const calls = [];
+  const mockSupabase = {
+    storage: {
+      async listBuckets() {
+        calls.push(["listBuckets"]);
+        return { data: [], error: null };
+      },
+      async createBucket(name, options) {
+        calls.push(["createBucket", name, options.public, options.fileSizeLimit]);
+        return { data: {}, error: null };
+      },
+      from(bucket) {
+        return {
+          async upload(objectPath, buffer, options) {
+            calls.push(["upload", bucket, objectPath, buffer.toString("utf8"), options.contentType]);
+            return { data: { path: objectPath }, error: null };
+          },
+          getPublicUrl(objectPath) {
+            calls.push(["getPublicUrl", bucket, objectPath]);
+            return {
+              data: {
+                publicUrl: `https://example.supabase.co/storage/v1/object/public/${bucket}/${objectPath}`
+              }
+            };
+          }
+        };
+      }
+    }
+  };
+
+  db.resetSupabaseForTests(mockSupabase);
+  try {
+    const result = await db.uploadEvidencePhoto({
+      buffer: Buffer.from("jpg"),
+      filename: "photo.jpeg",
+      mediaType: "image/jpeg"
+    });
+
+    assert.strictEqual(result.storageBucket, "test-evidence");
+    assert.match(result.storagePath, /^evidence\/\d{4}\/\d{2}\/\d+-[a-f0-9]+\.jpg$/);
+    assert.strictEqual(result.url, result.uploadedUrl);
+    assert.match(result.url, /^https:\/\/example\.supabase\.co\/storage\/v1\/object\/public\/test-evidence\/evidence\//);
+    assert.deepStrictEqual(calls[0], ["listBuckets"]);
+    assert.deepStrictEqual(calls[1], ["createBucket", "test-evidence", true, "10MB"]);
+    assert.strictEqual(calls[2][0], "upload");
+    assert.strictEqual(calls[2][1], "test-evidence");
+    assert.strictEqual(calls[2][3], "jpg");
+    assert.strictEqual(calls[2][4], "image/jpeg");
+  } finally {
+    db.resetSupabaseForTests();
+    if (originalBucket === undefined) {
+      delete process.env.SUPABASE_STORAGE_BUCKET;
+    } else {
+      process.env.SUPABASE_STORAGE_BUCKET = originalBucket;
+    }
+  }
+}
+
 async function testSenseNovaClient() {
   const calls = [];
   const originalFetch = global.fetch;
@@ -518,6 +580,7 @@ async function run() {
   testVehicleNormalization();
   await testApiErrorMetadata();
   await testCloudbaseRecognitionTimeout();
+  await testSupabaseStorageUpload();
   await testSenseNovaClient();
   console.log("all tests passed");
 }

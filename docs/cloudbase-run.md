@@ -23,6 +23,7 @@ mini-parking-api
 ```text
 SUPABASE_URL=你的 Supabase Project URL
 SUPABASE_SERVICE_KEY=你的 Supabase service_role key
+SUPABASE_STORAGE_BUCKET=parking-evidence
 SENSENOVA_API_KEY=你的模型密钥
 SENSENOVA_BASE_URL=https://token.sensenova.cn
 SENSENOVA_MODEL=sensenova-6.7-flash-lite
@@ -48,7 +49,9 @@ MODEL_API_MOCK=1
 
 这样录入页识别会返回本地模拟结果，方便先打通小程序到云托管的链路。
 
-Supabase 需要先执行 `server/migration.sql` 建表；如需示例数据，可在本地或一次性任务中设置同样的 Supabase 环境变量后执行：
+Supabase 需要先执行 `server/migration.sql` 建表。图片证据会上传到 Supabase Storage，默认 bucket 为 `parking-evidence`；服务端会用 service role 自动创建公开 bucket，也可以在 Supabase 控制台提前创建。
+
+如需示例数据，可在本地或一次性任务中设置同样的 Supabase 环境变量后执行：
 
 ```bash
 node server/seed.js

@@ -238,30 +238,6 @@ function parseMultipart(req) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Ensure uploads directory exists
-// ---------------------------------------------------------------------------
-
-function ensureUploadsDir() {
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  }
-}
-
-function safeUploadExtension(filename, mediaType) {
-  const fromName = path.extname(String(filename || "")).toLowerCase();
-  if (MIME_TYPES[fromName]) {
-    return fromName;
-  }
-
-  const type = String(mediaType || "").toLowerCase();
-  if (type === "image/png") return ".png";
-  if (type === "image/webp") return ".webp";
-  if (type === "image/gif") return ".gif";
-  if (type === "image/bmp") return ".bmp";
-  return ".jpg";
-}
-
 function localUploadPathFromUrl(uploadedUrl) {
   const value = String(uploadedUrl || "");
   const pathname = value.startsWith("http")
@@ -274,7 +250,62 @@ function localUploadPathFromUrl(uploadedUrl) {
   return path.join(UPLOADS_DIR, safeName);
 }
 
+function parseStoragePhotoRef(uploadedUrl) {
+  const value = String(uploadedUrl || "");
+  if (!value) {
+    return { pathname: "" };
+  }
+  if (!value.startsWith("http")) {
+    return { pathname: value };
+  }
+
+  const parsed = new URL(value);
+  return {
+    pathname: parsed.pathname,
+    publicUrl: value
+  };
+}
+
+function storagePathFromUploadedUrl(uploadedUrl, bucketName) {
+  const { pathname } = parseStoragePhotoRef(uploadedUrl);
+  const bucket = bucketName || db.getStorageBucketName();
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const markerIndex = pathname.indexOf(marker);
+  if (markerIndex >= 0) {
+    return decodeURIComponent(pathname.slice(markerIndex + marker.length));
+  }
+
+  if (pathname.startsWith(`${bucket}/`)) {
+    return pathname.slice(bucket.length + 1);
+  }
+
+  return "";
+}
+
 async function readUploadedPhotoRef(photoRef) {
+  if (photoRef && photoRef.storagePath) {
+    const buffer = await db.downloadEvidencePhoto(photoRef.storageBucket, photoRef.storagePath);
+    return {
+      base64: buffer.toString("base64"),
+      mediaType: photoRef.mediaType || inferMediaTypeFromPath(photoRef.storagePath),
+      uploadedUrl: photoRef.uploadedUrl,
+      storageBucket: photoRef.storageBucket,
+      storagePath: photoRef.storagePath
+    };
+  }
+
+  const storagePath = storagePathFromUploadedUrl(photoRef && photoRef.uploadedUrl, photoRef && photoRef.storageBucket);
+  if (storagePath) {
+    const buffer = await db.downloadEvidencePhoto(photoRef && photoRef.storageBucket, storagePath);
+    return {
+      base64: buffer.toString("base64"),
+      mediaType: (photoRef && photoRef.mediaType) || inferMediaTypeFromPath(storagePath),
+      uploadedUrl: photoRef && photoRef.uploadedUrl,
+      storageBucket: photoRef && photoRef.storageBucket,
+      storagePath
+    };
+  }
+
   const filePath = localUploadPathFromUrl(photoRef && photoRef.uploadedUrl);
   const buffer = await fs.promises.readFile(filePath);
   return {
@@ -282,18 +313,6 @@ async function readUploadedPhotoRef(photoRef) {
     mediaType: (photoRef && photoRef.mediaType) || inferMediaTypeFromPath(filePath),
     uploadedUrl: photoRef && photoRef.uploadedUrl
   };
-}
-
-async function saveUploadBuffer(buffer, ext) {
-  ensureUploadsDir();
-
-  const random = crypto.randomBytes(8).toString("hex");
-  const filename = `${Date.now()}-${random}${ext || ".jpg"}`;
-  const filepath = path.join(UPLOADS_DIR, filename);
-
-  await fs.promises.writeFile(filepath, buffer);
-
-  return `/uploads/${filename}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -451,8 +470,12 @@ async function handleUpload(req, res) {
       return sendError(res, 400, "invalid base64 image", "INVALID_FILE");
     }
 
-    const url = await saveUploadBuffer(buffer, safeUploadExtension(filename, mediaType));
-    sendJson(res, 201, { url });
+    const upload = await db.uploadEvidencePhoto({
+      buffer,
+      filename,
+      mediaType
+    });
+    sendJson(res, 201, upload);
     return;
   }
 
@@ -462,9 +485,13 @@ async function handleUpload(req, res) {
   }
 
   const file = files[0];
-  const url = await saveUploadBuffer(file.data, safeUploadExtension(file.filename, contentType));
+  const upload = await db.uploadEvidencePhoto({
+    buffer: file.data,
+    filename: file.filename,
+    mediaType: inferMediaTypeFromPath(file.filename)
+  });
 
-  sendJson(res, 201, { url });
+  sendJson(res, 201, upload);
 }
 
 async function handleRecognize(req, res) {
