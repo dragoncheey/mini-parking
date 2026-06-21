@@ -452,6 +452,86 @@ async function testCloudbaseRecognitionTimeout() {
   }
 }
 
+async function testAddPageRetriesPhotoUploadBeforeRecognition() {
+  installWxStorageMock();
+  const pagePath = require.resolve("../pages/add/add.js");
+  const originalPage = global.Page;
+  const originalUploadImage = api.uploadImage;
+  const originalRequestParkingRecognition = api.requestParkingRecognition;
+  let pageConfig = null;
+  const uploadCalls = [];
+  const recognitionCalls = [];
+
+  global.Page = (config) => {
+    pageConfig = config;
+  };
+  api.uploadImage = async (filePath) => {
+    uploadCalls.push(filePath);
+    return {
+      uploadedUrl: "https://example.supabase.co/storage/v1/object/public/test-evidence/evidence/photo.jpg",
+      storageBucket: "test-evidence",
+      storagePath: "evidence/photo.jpg"
+    };
+  };
+  api.requestParkingRecognition = async (payload, options) => {
+    recognitionCalls.push({ payload, options });
+    return {
+      mode: "mock",
+      recognition: {
+        confidence: 80,
+        pricing: {},
+        location: {},
+        warnings: []
+      }
+    };
+  };
+  global.wx.showToast = () => {};
+
+  try {
+    delete require.cache[pagePath];
+    require(pagePath);
+
+    const page = {
+      data: {
+        evidencePhotos: [{
+          path: "/tmp/local-photo.jpg",
+          localPath: "/tmp/local-photo.jpg"
+        }],
+        photoCount: 1,
+        form: { name: "", address: "", notes: "" },
+        isRecognizing: false,
+        recognizeDisabled: false
+      },
+      setData(updates) {
+        this.data = { ...this.data, ...updates };
+      }
+    };
+    Object.keys(pageConfig).forEach((key) => {
+      if (typeof pageConfig[key] === "function") {
+        page[key] = pageConfig[key];
+      }
+    });
+
+    await page.recognizeEvidence();
+
+    assert.deepStrictEqual(uploadCalls, ["/tmp/local-photo.jpg"]);
+    assert.strictEqual(page.data.evidencePhotos[0].uploaded, true);
+    assert.strictEqual(page.data.evidencePhotos[0].storagePath, "evidence/photo.jpg");
+    assert.strictEqual(recognitionCalls.length, 1);
+    assert.strictEqual(recognitionCalls[0].payload.photoRefs.length, 1);
+    assert.strictEqual(recognitionCalls[0].payload.photoRefs[0].storagePath, "evidence/photo.jpg");
+  } finally {
+    api.uploadImage = originalUploadImage;
+    api.requestParkingRecognition = originalRequestParkingRecognition;
+    if (originalPage) {
+      global.Page = originalPage;
+    } else {
+      delete global.Page;
+    }
+    delete require.cache[pagePath];
+  }
+}
+
 async function testSupabaseStorageUpload() {
   const originalBucket = process.env.SUPABASE_STORAGE_BUCKET;
   process.env.SUPABASE_STORAGE_BUCKET = "test-evidence";
@@ -580,6 +660,7 @@ async function run() {
   testVehicleNormalization();
   await testApiErrorMetadata();
   await testCloudbaseRecognitionTimeout();
+  await testAddPageRetriesPhotoUploadBeforeRecognition();
   await testSupabaseStorageUpload();
   await testSenseNovaClient();
   console.log("all tests passed");

@@ -457,17 +457,29 @@ async function handleDeleteVehicle(req, res, params, openid) {
 }
 
 async function handleUpload(req, res) {
+  const startedAt = Date.now();
   const contentType = req.headers["content-type"] || "";
 
   if (contentType.indexOf("application/json") >= 0) {
-    const { filename, mediaType, base64 } = await readJsonBody(req);
+    const body = await readJsonBody(req);
+    const requestId = getRequestId(req, body);
+    const { filename, mediaType, base64 } = body;
+    logServerDebug("upload:start", {
+      requestId,
+      mode: "json",
+      bodyBytes: body.__bodyBytes || 0,
+      filename,
+      mediaType,
+      base64Chars: base64 ? base64.length : 0,
+      estimatedBytes: estimateBase64Bytes(base64)
+    });
     if (!base64) {
-      return sendError(res, 400, "missing base64 image", "NO_FILE");
+      return sendError(res, 400, "missing base64 image", "NO_FILE", requestId);
     }
 
     const buffer = Buffer.from(base64, "base64");
     if (!buffer.length) {
-      return sendError(res, 400, "invalid base64 image", "INVALID_FILE");
+      return sendError(res, 400, "invalid base64 image", "INVALID_FILE", requestId);
     }
 
     const upload = await db.uploadEvidencePhoto({
@@ -475,13 +487,27 @@ async function handleUpload(req, res) {
       filename,
       mediaType
     });
+    logServerDebug("upload:success", {
+      requestId,
+      mode: "json",
+      durationMs: Date.now() - startedAt,
+      storageBucket: upload.storageBucket,
+      storagePath: upload.storagePath,
+      uploadedUrl: upload.uploadedUrl || upload.url
+    });
     sendJson(res, 201, upload);
     return;
   }
 
+  const requestId = getRequestId(req);
+  logServerDebug("upload:start", {
+    requestId,
+    mode: "multipart",
+    contentType
+  });
   const files = await parseMultipart(req);
   if (!files.length) {
-    return sendError(res, 400, "no file uploaded", "NO_FILE");
+    return sendError(res, 400, "no file uploaded", "NO_FILE", requestId);
   }
 
   const file = files[0];
@@ -491,6 +517,16 @@ async function handleUpload(req, res) {
     mediaType: inferMediaTypeFromPath(file.filename)
   });
 
+  logServerDebug("upload:success", {
+    requestId,
+    mode: "multipart",
+    durationMs: Date.now() - startedAt,
+    filename: file.filename,
+    bytes: file.data.length,
+    storageBucket: upload.storageBucket,
+    storagePath: upload.storagePath,
+    uploadedUrl: upload.uploadedUrl || upload.url
+  });
   sendJson(res, 201, upload);
 }
 

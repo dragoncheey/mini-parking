@@ -293,9 +293,21 @@ function requestParkingRecognition(payload, options) {
 
 function request(method, path, data, options) {
   const opts = options || {};
-  const header = buildAuthHeaders(opts.header);
+  const requestId = opts.requestId || createRequestId(path === "/api/upload" ? "upload" : "api");
+  const startedAt = Date.now();
+  const header = buildAuthHeaders({
+    "X-Request-Id": requestId,
+    ...(opts.header || {})
+  });
 
   if (cloudbaseConfig.enabled) {
+    logApiDebug("callContainer:api-start", {
+      requestId,
+      path,
+      method,
+      timeout: opts.timeout || apiConfig.requestTimeoutMs,
+      summary: summarizeRequestData(path, data)
+    });
     return getCloudClient().then((client) => client.callContainer({
       path,
       method,
@@ -305,14 +317,40 @@ function request(method, path, data, options) {
       timeout: opts.timeout || apiConfig.requestTimeoutMs
     })).then((res) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
+        logApiDebug("callContainer:api-success", {
+          requestId,
+          path,
+          statusCode: res.statusCode,
+          durationMs: Date.now() - startedAt
+        });
         return res.data;
       }
       throw buildApiError(res, "请求失败");
+    }).catch((error) => {
+      error.requestId = error.requestId || requestId;
+      console.error("[mini-parking api] callContainer:api-fail", {
+        requestId,
+        path,
+        method,
+        statusCode: error.statusCode,
+        code: error.code,
+        errMsg: error.errMsg,
+        message: error.message,
+        durationMs: Date.now() - startedAt
+      });
+      throw error;
     });
   }
 
   const baseUrl = apiConfig.baseUrl || "http://127.0.0.1:8787";
   const url = baseUrl + path;
+  logApiDebug("wx.request:api-start", {
+    requestId,
+    url,
+    method,
+    timeout: opts.timeout || apiConfig.requestTimeoutMs,
+    summary: summarizeRequestData(path, data)
+  });
 
   return new Promise((resolve, reject) => {
     wx.request({
@@ -323,13 +361,37 @@ function request(method, path, data, options) {
       timeout: opts.timeout || apiConfig.requestTimeoutMs,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
+          logApiDebug("wx.request:api-success", {
+            requestId,
+            path,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - startedAt
+          });
           resolve(res.data);
         } else {
-          reject(buildApiError(res, "请求失败"));
+          const error = buildApiError(res, "请求失败");
+          error.requestId = error.requestId || requestId;
+          console.error("[mini-parking api] wx.request:api-bad-response", {
+            requestId,
+            path,
+            statusCode: res.statusCode,
+            code: error.code,
+            message: error.message,
+            durationMs: Date.now() - startedAt
+          });
+          reject(error);
         }
       },
       fail(err) {
-        reject(new Error(err.errMsg || "网络请求失败"));
+        const error = new Error(err.errMsg || "网络请求失败");
+        error.requestId = requestId;
+        console.error("[mini-parking api] wx.request:api-fail", {
+          requestId,
+          path,
+          errMsg: err.errMsg,
+          durationMs: Date.now() - startedAt
+        });
+        reject(error);
       }
     });
   });
@@ -450,15 +512,30 @@ function readFileAsBase64(filePath) {
   });
 }
 
-async function uploadImage(filePath) {
+async function uploadImage(filePath, options) {
   const path = "/api/upload";
+  const opts = options || {};
+  const requestId = opts.requestId || createRequestId("upload");
 
   if (cloudbaseConfig.enabled) {
     const base64 = await readFileAsBase64(filePath);
+    logApiDebug("upload:cloud-start", {
+      requestId,
+      filename: getFilename(filePath),
+      mediaType: inferMediaType(filePath),
+      base64Chars: base64 ? base64.length : 0,
+      estimatedBytes: estimateBase64Bytes(base64)
+    });
     const res = await request("POST", path, {
       filename: getFilename(filePath),
       mediaType: inferMediaType(filePath),
       base64
+    }, { requestId });
+    logApiDebug("upload:cloud-success", {
+      requestId,
+      uploadedUrl: res && (res.uploadedUrl || res.url),
+      storageBucket: res && res.storageBucket,
+      storagePath: res && res.storagePath
     });
     return res;
   }
@@ -466,10 +543,18 @@ async function uploadImage(filePath) {
   const baseUrl = apiConfig.baseUrl || "http://127.0.0.1:8787";
   const url = baseUrl + path;
   const token = getToken();
-  const header = {};
+  const header = {
+    "X-Request-Id": requestId
+  };
   if (token) {
     header.Authorization = "Bearer " + token;
   }
+  logApiDebug("upload:file-start", {
+    requestId,
+    url,
+    filename: getFilename(filePath),
+    mediaType: inferMediaType(filePath)
+  });
 
   return new Promise((resolve, reject) => {
     wx.uploadFile({
@@ -482,16 +567,47 @@ async function uploadImage(filePath) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
             const data = JSON.parse(res.data);
+            logApiDebug("upload:file-success", {
+              requestId,
+              statusCode: res.statusCode,
+              uploadedUrl: data && (data.uploadedUrl || data.url),
+              storageBucket: data && data.storageBucket,
+              storagePath: data && data.storagePath
+            });
             resolve(data);
           } catch (e) {
-            reject(new Error("上传响应解析失败"));
+            const error = new Error("上传响应解析失败");
+            error.requestId = requestId;
+            reject(error);
           }
         } else {
-          reject(new Error("图片上传失败"));
+          let data = {};
+          try {
+            data = JSON.parse(res.data || "{}");
+          } catch (e) {
+            data = {};
+          }
+          const error = new Error(data.error || "图片上传失败");
+          error.statusCode = res.statusCode;
+          error.code = data.code || "";
+          error.requestId = data.requestId || requestId;
+          console.error("[mini-parking api] upload:file-bad-response", {
+            requestId,
+            statusCode: res.statusCode,
+            code: error.code,
+            message: error.message
+          });
+          reject(error);
         }
       },
       fail(err) {
-        reject(new Error(err.errMsg || "图片上传失败"));
+        const error = new Error(err.errMsg || "图片上传失败");
+        error.requestId = requestId;
+        console.error("[mini-parking api] upload:file-fail", {
+          requestId,
+          errMsg: err.errMsg
+        });
+        reject(error);
       }
     });
   });

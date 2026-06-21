@@ -107,6 +107,33 @@ function getReadableRecognitionError(error) {
   return `${(error && (error.message || error.errMsg)) || "识别接口不可用，请检查网络配置。"}${requestId}`;
 }
 
+function getReadableUploadError(error) {
+  const requestId = error && error.requestId ? `（requestId: ${error.requestId}）` : "";
+  if (isUnauthorizedError(error)) {
+    return `登录已过期，请重新登录后再上传照片。${requestId}`;
+  }
+  return `${(error && (error.message || error.errMsg)) || "图片上传失败，请检查网络或存储配置。"}${requestId}`;
+}
+
+function getPhotoLocalPath(photo) {
+  return photo && (photo.localPath || photo.tempFilePath || photo.originalPath || photo.path);
+}
+
+function attachUploadResult(photo, upload) {
+  const uploadedUrl = upload && (upload.uploadedUrl || upload.url);
+  if (!uploadedUrl) {
+    throw new Error("图片上传失败：上传接口未返回图片地址。");
+  }
+  return {
+    ...photo,
+    uploadedUrl,
+    storageBucket: upload.storageBucket || "",
+    storagePath: upload.storagePath || "",
+    uploaded: true,
+    uploadError: ""
+  };
+}
+
 function buildEmptyForm() {
   return {
     name: "", address: "", entrance: "",
@@ -478,29 +505,33 @@ Page({
             capturedAt: Date.now()
           };
           try {
-            const upload = await api.uploadImage(localPath);
-            const uploadedUrl = upload && (upload.uploadedUrl || upload.url);
-            if (uploadedUrl) {
-              photo.uploadedUrl = uploadedUrl;
-              photo.storageBucket = upload.storageBucket || "";
-              photo.storagePath = upload.storagePath || "";
-              photo.uploaded = true;
-            }
+            Object.assign(photo, await this.uploadEvidencePhoto(photo));
           } catch (e) {
-            console.warn("Image upload failed:", e.message);
+            const uploadError = getReadableUploadError(e);
+            photo.uploaded = false;
+            photo.uploadError = uploadError;
+            console.warn("Image upload failed:", {
+              message: e.message,
+              code: e.code,
+              statusCode: e.statusCode,
+              requestId: e.requestId
+            });
             wx.showToast({ title: "图片上传失败", icon: "none" });
           }
           newPhotos.push(photo);
         }
 
         const evidencePhotos = this.data.evidencePhotos.concat(newPhotos).slice(0, 6);
+        const failedUploads = evidencePhotos.filter((photo) => photo.uploadError).length;
         this.setData({
           evidencePhotos,
           photoCount: evidencePhotos.length,
           canRecognize: evidencePhotos.length > 0,
           recognizeDisabled: evidencePhotos.length <= 0,
           recognitionStatus: "已采集，待识别/复核",
-          recognitionHint: "当前已保存照片证据和定位字段。接入 OCR 后可自动回填免费时长、计费单位和价格。"
+          recognitionHint: failedUploads
+            ? "部分照片尚未上传成功，点击识别时会先自动重试上传。"
+            : "当前已保存照片证据和定位字段。接入 OCR 后可自动回填免费时长、计费单位和价格。"
         });
 
         if (!this.data.form.latitude || !this.data.form.longitude) {
@@ -511,6 +542,15 @@ Page({
         wx.showToast({ title: "未选择照片", icon: "none" });
       }
     });
+  },
+
+  async uploadEvidencePhoto(photo, options) {
+    const filePath = getPhotoLocalPath(photo);
+    if (!filePath) {
+      throw new Error("图片上传失败：找不到本地照片路径。");
+    }
+    const upload = await api.uploadImage(filePath, options);
+    return attachUploadResult(photo, upload);
   },
 
   previewEvidence(event) {
@@ -576,6 +616,46 @@ Page({
         storagePath: photo.storagePath || "",
         mediaType: inferMediaType(photo.uploadedUrl || photo.localPath || photo.path)
       }));
+  },
+
+  async ensureRecognitionPhotosUploaded(selectedPhotos, requestId) {
+    let evidencePhotos = this.data.evidencePhotos.slice();
+    const uploadedPhotos = [];
+
+    for (let index = 0; index < selectedPhotos.length; index += 1) {
+      const photo = selectedPhotos[index];
+      if (photo && photo.uploadedUrl) {
+        uploadedPhotos.push(photo);
+        continue;
+      }
+
+      console.info("[mini-parking upload] retry-before-recognition", {
+        requestId,
+        index,
+        localPath: getPhotoLocalPath(photo)
+      });
+
+      try {
+        const uploadedPhoto = await this.uploadEvidencePhoto(photo, { requestId: `${requestId}-upload-${index + 1}` });
+        evidencePhotos[index] = uploadedPhoto;
+        uploadedPhotos.push(uploadedPhoto);
+        this.setData({ evidencePhotos });
+      } catch (error) {
+        const uploadError = getReadableUploadError(error);
+        evidencePhotos[index] = {
+          ...photo,
+          uploaded: false,
+          uploadError
+        };
+        this.setData({
+          evidencePhotos,
+          recognitionHint: uploadError
+        });
+        throw new Error(`照片上传失败：${uploadError}`);
+      }
+    }
+
+    return uploadedPhotos;
   },
 
   requestRecognition(payload, options) {
@@ -669,7 +749,8 @@ Page({
         selectedPhotoCount: selectedPhotos.length
       });
 
-      const photoRefs = this.buildRecognitionPhotoRefs(selectedPhotos);
+      const uploadedPhotos = await this.ensureRecognitionPhotosUploaded(selectedPhotos, requestId);
+      const photoRefs = this.buildRecognitionPhotoRefs(uploadedPhotos);
       const recognitionPayload = {
         form: this.data.form,
         textHint: this.data.form.notes

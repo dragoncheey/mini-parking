@@ -29,7 +29,8 @@
           class="photo-item"
         >
           <image class="photo-thumb" src="{{item.path}}" mode="aspectFill" data-index="{{index}}" bindtap="previewEvidence" />
-          <button class="remove-photo" data-index="{{index}}" bindtap="removeEvidence">×</button>
+          <view class="remove-photo" data-index="{{index}}" catchtap="removeEvidence">×</view>
+          <view wx:if="{{item.uploadError}}" class="photo-upload-status">未上传</view>
         </view>
       </view>
     </view>

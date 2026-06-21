@@ -157,12 +157,26 @@
   justify-content: center;
   width: 44rpx;
   height: 44rpx;
-  min-height: 44rpx;
   border-radius: 50%;
   color: #ffffff;
   background: rgba(24, 33, 47, 0.72);
   font-size: 28rpx;
-  line-height: 1;
+  font-weight: 700;
+  line-height: 44rpx;
+  box-sizing: border-box;
+}
+
+.photo-upload-status {
+  position: absolute;
+  left: 8rpx;
+  bottom: 8rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 4rpx;
+  background: rgba(154, 75, 24, 0.88);
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .two-column {
