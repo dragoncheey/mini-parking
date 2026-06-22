@@ -8,19 +8,7 @@ const {
 } = require("./pricing");
 const { calculateDistanceMeters, estimateWalkingMinutes, formatDistance } = require("./location");
 
-const AVAILABILITY_LABELS = {
-  high: "车位较稳",
-  medium: "车位一般",
-  low: "可能满位",
-  unknown: "车位待确认"
-};
-
-const AVAILABILITY_PENALTY = {
-  high: 0,
-  medium: 4,
-  low: 12,
-  unknown: 7
-};
+const RECOMMENDATION_PAGE_SIZE = 10;
 
 function daysSince(dateText) {
   const timestamp = Date.parse(dateText);
@@ -50,7 +38,6 @@ function confidencePenalty(confidence) {
 
 function collectTags(lot, fee, cheapestFee, walkingMinutes) {
   const tags = [];
-  const availability = lot.availability || "unknown";
 
   if (fee === 0) {
     tags.push("当前时长免费");
@@ -61,8 +48,6 @@ function collectTags(lot, fee, cheapestFee, walkingMinutes) {
   if (walkingMinutes <= 5) {
     tags.push("步行近");
   }
-
-  tags.push(AVAILABILITY_LABELS[availability] || AVAILABILITY_LABELS.unknown);
 
   if ((lot.confidence || 0) < 65) {
     tags.push("建议复核");
@@ -83,11 +68,7 @@ function buildReason(item, cheapestFee) {
   parts.push(`步行约${item.walkingMinutes}分钟`);
 
   if (item.fee > cheapestFee) {
-    parts.push("但距离、车位或可信度更均衡");
-  }
-
-  if (item.availability === "low") {
-    parts.push("车位紧张时建议准备备选");
+    parts.push("但距离或可信度更均衡");
   }
 
   return parts.join("，");
@@ -122,10 +103,8 @@ function recommendParkingLots(options) {
     const fee = vehicleType
       ? calculateParkingFeeForVehicle(durationMinutes, lot.pricing, vehicleType)
       : calculateParkingFee(durationMinutes, lot.pricing);
-    const availability = lot.availability || "unknown";
     const score = fee
       + walkingMinutes * walkMinuteValue
-      + (AVAILABILITY_PENALTY[availability] || AVAILABILITY_PENALTY.unknown)
       + confidencePenalty(lot.confidence)
       + freshnessPenalty(lot.updatedAt);
 
@@ -163,6 +142,52 @@ function recommendParkingLots(options) {
   return sorted;
 }
 
+function getFiniteNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function sortRecommendationsByMode(recommendations, mode) {
+  const list = Array.isArray(recommendations) ? recommendations : [];
+  const sortMode = mode === "price" || mode === "distance" ? mode : "comprehensive";
+  const sorted = list.slice().sort((a, b) => {
+    const aFee = getFiniteNumber(a.fee, Infinity);
+    const bFee = getFiniteNumber(b.fee, Infinity);
+    const aDistance = getFiniteNumber(a.distanceMeters, Infinity);
+    const bDistance = getFiniteNumber(b.distanceMeters, Infinity);
+    const aScore = getFiniteNumber(a.score, Infinity);
+    const bScore = getFiniteNumber(b.score, Infinity);
+
+    if (sortMode === "price") {
+      return aFee - bFee || aDistance - bDistance || aScore - bScore;
+    }
+    if (sortMode === "distance") {
+      return aDistance - bDistance || aFee - bFee || aScore - bScore;
+    }
+    return aScore - bScore || aFee - bFee || aDistance - bDistance;
+  });
+
+  return sorted.map((item, index) => ({
+    ...item,
+    rank: index + 1,
+    isBest: index === 0,
+    bestClass: index === 0 ? "is-best" : ""
+  }));
+}
+
+function paginateRecommendations(recommendations, limit, pageSize) {
+  const list = Array.isArray(recommendations) ? recommendations : [];
+  const size = Math.max(1, Number(pageSize) || RECOMMENDATION_PAGE_SIZE);
+  const visibleLimit = Math.max(size, Number(limit) || size);
+  const items = list.slice(0, visibleLimit);
+
+  return {
+    items,
+    nextLimit: visibleLimit + size,
+    hasMore: items.length < list.length
+  };
+}
+
 function buildRecommendationSummary(recommendations) {
   if (!recommendations.length) {
     return "目的地 3 公里内还没有匹配的停车场，可以换个目的地、清空搜索词，或先录入停车场。";
@@ -175,11 +200,13 @@ function buildRecommendationSummary(recommendations) {
     return `综合推荐 ${best.name}：${best.reason}。`;
   }
 
-  return `费用最低是 ${cheapest.name}（${cheapest.feeText}），但综合距离、车位和可信度，更推荐 ${best.name}。`;
+  return `费用最低是 ${cheapest.name}（${cheapest.feeText}），但综合距离和可信度，更推荐 ${best.name}。`;
 }
 
 module.exports = {
-  AVAILABILITY_LABELS,
+  RECOMMENDATION_PAGE_SIZE,
   buildRecommendationSummary,
-  recommendParkingLots
+  paginateRecommendations,
+  recommendParkingLots,
+  sortRecommendationsByMode
 };

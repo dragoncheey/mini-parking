@@ -2,21 +2,38 @@
   padding-bottom: 48rpx;
 }
 
-.detail-header,
-.fee-panel,
+.detail-hero,
+.detail-primary-panel,
 .section {
   border: 1rpx solid #dce4ec;
   border-radius: 8rpx;
   background: #ffffff;
 }
 
-.detail-header {
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
   padding: 28rpx;
 }
 
+.detail-hero-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-kicker,
 .detail-title,
 .detail-address {
   display: block;
+}
+
+.detail-kicker {
+  margin-bottom: 10rpx;
+  color: #166a5b;
+  font-size: 22rpx;
+  font-weight: 900;
 }
 
 .detail-title {
@@ -38,12 +55,6 @@
   flex-wrap: wrap;
   gap: 10rpx;
   margin-top: 20rpx;
-}
-
-.source-panel {
-  margin-top: 24rpx;
-  padding-top: 22rpx;
-  border-top: 1rpx solid #edf1f4;
 }
 
 .owner-row,
@@ -104,13 +115,18 @@
   font-size: 24rpx;
 }
 
-.fee-panel {
+.detail-primary-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24rpx;
   margin-top: 20rpx;
   padding: 28rpx;
+}
+
+.fee-summary {
+  flex: 1;
+  min-width: 0;
 }
 
 .panel-label {
@@ -135,6 +151,13 @@
 .section {
   margin-top: 20rpx;
   padding: 26rpx;
+}
+
+.trust-section .owner-row {
+  margin-bottom: 18rpx;
+  padding: 16rpx;
+  border-radius: 8rpx;
+  background: #f8fafc;
 }
 
 .section-title {

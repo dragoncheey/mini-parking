@@ -12,13 +12,19 @@
     bindmarkertap="onMarkerTap"
   ></map>
 
-  <view wx:if="{{!mapExpanded}}" class="top-action-row compact-top-actions">
-    <view class="account-chip {{accountStatusClass}}" bindtap="login">
+  <view wx:if="{{!mapExpanded}}" class="map-top-actions">
+    <view class="map-account-chip {{accountStatusClass}}" bindtap="login">
       <text class="account-dot"></text>
       <text class="account-status">{{accountStatusText}}</text>
       <text class="account-action">{{accountActionText}}</text>
     </view>
-    <button class="secondary-button add-button" bindtap="goAdd">分享停车场</button>
+    <button
+      class="map-add-action"
+      bindtap="goAdd"
+      aria-label="分享停车场"
+    >
+      <text class="map-add-plus">+</text>
+    </button>
   </view>
 
   <view wx:if="{{mapExpanded}}" class="map-search-bar">
@@ -45,10 +51,12 @@
       aria-role="button"
       aria-label="放大地图"
     >
-      <text class="expand-corner expand-corner-tl"></text>
-      <text class="expand-corner expand-corner-tr"></text>
-      <text class="expand-corner expand-corner-bl"></text>
-      <text class="expand-corner expand-corner-br"></text>
+      <view class="map-mini-icon expand-mini-icon">
+        <view class="mini-corner mini-corner-tl"></view>
+        <view class="mini-corner mini-corner-tr"></view>
+        <view class="mini-corner mini-corner-bl"></view>
+        <view class="mini-corner mini-corner-br"></view>
+      </view>
     </view>
     <view
       class="map-round-button locate-control"
@@ -57,13 +65,11 @@
       aria-role="button"
       aria-label="定位到当前位置"
     >
-      <view class="locate-orb">
-        <view class="locate-ring locate-ring-outer"></view>
-        <view class="locate-ring locate-ring-inner"></view>
-        <view class="locate-axis locate-axis-x"></view>
-        <view class="locate-axis locate-axis-y"></view>
-        <view class="locate-arrow"></view>
-        <view class="locate-dot"></view>
+      <view class="map-mini-icon locate-mini-icon">
+        <view class="mini-axis mini-axis-x"></view>
+        <view class="mini-axis mini-axis-y"></view>
+        <view class="mini-ring"></view>
+        <view class="mini-dot"></view>
       </view>
     </view>
   </view>
@@ -85,7 +91,7 @@
         catchtouchcancel="onSheetTouchCancel"
       >
         <view class="sheet-grabber"></view>
-        <view wx:if="{{!mapExpanded}}" class="sheet-summary-row">
+        <view wx:if="{{!mapExpanded}}" class="workbench-summary sheet-summary-row">
           <view class="sheet-summary-main">
             <view class="sheet-title-line">
               <text class="sheet-title">{{destinationName}}</text>
@@ -98,7 +104,7 @@
             <text class="sheet-count-label">个停车场</text>
           </view>
         </view>
-        <view wx:if="{{!sheetExpanded && !mapExpanded}}" class="quick-summary-grid">
+        <view wx:if="{{!sheetExpanded && !mapExpanded}}" class="workbench-config-row quick-summary-grid">
           <view class="quick-summary-item" bindtap="chooseDestination">
             <text class="quick-label">目的地</text>
             <text class="quick-value">{{destinationName}}</text>
@@ -112,6 +118,26 @@
             <text class="quick-value">{{currentVehicleText}}</text>
           </view>
         </view>
+        <block wx:if="{{!sheetExpanded && !mapExpanded && hasRecommendations}}">
+          <view
+            wx:for="{{recommendations}}"
+            wx:key="id"
+            wx:if="{{index === 0}}"
+            class="first-recommendation-preview"
+            data-id="{{item.id}}"
+            catchtap="goDetail"
+          >
+            <view class="preview-rank">{{item.rank}}</view>
+            <view class="preview-main">
+              <text class="preview-name">{{item.name}}</text>
+              <text class="preview-meta">{{item.distanceText}} · 步行约 {{item.walkingMinutes}} 分钟</text>
+            </view>
+            <view class="preview-price">
+              <text class="preview-fee">{{item.feeText}}</text>
+              <text class="preview-note">{{item.durationText}}</text>
+            </view>
+          </view>
+        </block>
         <view wx:if="{{mapExpanded && !sheetExpanded}}" class="map-mode-summary">
           <text class="map-mode-title">{{destinationName}}</text>
           <text class="map-mode-meta">{{recommendations.length}} 个停车场 · {{durationText}}</text>
@@ -122,19 +148,21 @@
     <scroll-view
       class="sheet-scroll"
       scroll-y="{{sheetExpanded}}"
+      lower-threshold="96"
+      bindscrolltolower="loadMoreRecommendations"
     >
       <view class="sheet-content">
         <view wx:if="{{sheetExpanded}}" class="expanded-controls">
-          <view class="quick-controls expanded-quick-controls">
-            <view class="quick-control primary-control" bindtap="chooseDestination">
+          <view class="expanded-control-row">
+            <view class="config-control primary-control" bindtap="chooseDestination">
               <text class="quick-label">目的地</text>
               <text class="quick-value">{{destinationName}}</text>
             </view>
-            <view class="quick-control primary-control" bindtap="toggleDurationPicker">
+            <view class="config-control primary-control" bindtap="toggleDurationPicker">
               <text class="quick-label">时长</text>
               <text class="quick-value">{{durationText}}</text>
             </view>
-            <view class="quick-control" bindtap="goVehicles">
+            <view class="config-control" bindtap="goVehicles">
               <text class="quick-label">车辆</text>
               <text class="quick-value">{{currentVehicleText}}</text>
             </view>
@@ -222,13 +250,35 @@
         </view>
 
         <view class="list-header">
-          <text class="section-title">附近停车场</text>
+          <view class="recommendation-sort">
+            <view
+              class="recommendation-sort-trigger {{sortDropdownOpen ? 'is-open' : ''}}"
+              bindtap="toggleSortDropdown"
+              aria-role="button"
+              aria-label="切换排序"
+            >
+              <text>{{recommendationSortText}}</text>
+              <text class="sort-chevron"></text>
+            </view>
+            <view wx:if="{{sortDropdownOpen}}" class="recommendation-sort-menu">
+              <view
+                wx:for="{{recommendationSortOptions}}"
+                wx:key="value"
+                class="recommendation-sort-option {{item.value === recommendationSortMode ? 'is-active' : ''}}"
+                data-mode="{{item.value}}"
+                bindtap="setRecommendationSortMode"
+              >
+                <text class="sort-check">{{item.value === recommendationSortMode ? '✓' : ''}}</text>
+                <text>{{item.label}}</text>
+              </view>
+            </view>
+          </view>
           <text class="muted">{{recommendations.length}} 个停车场</text>
         </view>
 
         <block wx:if="{{hasRecommendations}}">
           <view
-            wx:for="{{recommendations}}"
+            wx:for="{{visibleRecommendations}}"
             wx:key="id"
             class="lot-card {{item.bestClass}}"
           >
@@ -251,7 +301,6 @@
             <view class="metric-row">
               <text>距目的地 {{item.distanceText}}</text>
               <text>步行约 {{item.walkingMinutes}} 分钟</text>
-              <text>{{item.availabilityText}}</text>
             </view>
 
             <view class="tag-row">
@@ -278,6 +327,9 @@
               <button class="primary-button action-button" data-id="{{item.id}}" bindtap="openNavigation">导航</button>
               <button class="ghost-button action-button" data-id="{{item.id}}" bindtap="goDetail">详情</button>
             </view>
+          </view>
+          <view class="load-more-line {{hasMoreRecommendations ? '' : 'is-end'}}">
+            {{hasMoreRecommendations ? '继续下拉加载更多' : '我是有底线的'}}
           </view>
         </block>
 

@@ -1,4 +1,11 @@
 <view class="page vehicles-page">
+  <view class="vehicles-header">
+    <view>
+      <text class="vehicles-kicker">车辆配置</text>
+      <text class="vehicles-title">{{pageTitle}}</text>
+    </view>
+    <button wx:if="{{!loginRequired}}" class="secondary-button add-entry-button" bindtap="openAddPanel">添加</button>
+  </view>
 
   <view wx:if="{{loginRequired}}" class="login-panel">
     <text class="login-title">登录后管理车辆</text>
@@ -13,9 +20,9 @@
           <text class="current-label">当前车辆</text>
           <text class="current-value">{{currentVehicleLabel}}</text>
         </view>
-        <button class="secondary-button add-entry-button" bindtap="openAddPanel">添加爱车</button>
+        <button class="ghost-button add-entry-button" bindtap="openAddPanel">更换</button>
       </view>
-      <text class="current-copy">绑定车牌号可按燃油车或新能源车自动匹配停车优惠。</text>
+      <text class="current-copy">推荐价格会按当前车型匹配基础规则或新能源优惠。</text>
     </view>
 
     <view class="list-section">
@@ -27,11 +34,14 @@
           data-id="{{item.id}}"
           bindtap="openEditPanel"
         >
-          <view class="vehicle-card-head">
-            <text class="plate-number">{{item.plateDisplay}}</text>
-          </view>
-          <view class="vehicle-card-body">
-            <text class="energy-badge">{{item.vehicleTypeLabel}}</text>
+          <view class="vehicle-card-main">
+            <view class="vehicle-card-head">
+              <text class="plate-number">{{item.plateDisplay}}</text>
+              <text wx:if="{{item.id === currentVehicleId}}" class="current-badge">当前</text>
+            </view>
+            <view class="vehicle-card-body">
+              <text class="energy-badge">{{item.vehicleTypeLabel}}</text>
+            </view>
           </view>
           <view class="vehicle-actions">
             <button class="secondary-button small-button" data-id="{{item.id}}" catchtap="useVehicle">设当前</button>

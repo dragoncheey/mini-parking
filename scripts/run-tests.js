@@ -1,7 +1,14 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const { seedParkingLots } = require("../data/seedParking");
 const { calculateParkingFee, calculateParkingFeeForVehicle } = require("../utils/pricing");
-const { recommendParkingLots } = require("../utils/recommendation");
+const {
+  buildRecommendationSummary,
+  paginateRecommendations,
+  recommendParkingLots,
+  sortRecommendationsByMode
+} = require("../utils/recommendation");
 const { buildMockRecognition, normalizeRecognition, parseJsonFromText } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("../server/modelClient");
 const { extractCloudOpenid, extractOpenid, generateToken } = require("../server/auth");
@@ -27,6 +34,10 @@ const {
 } = require("../utils/storage");
 
 const LEGACY_POI_KEY = "amap" + "PoiId";
+
+function readProjectFile(filePath) {
+  return fs.readFileSync(path.join(__dirname, "..", filePath), "utf8");
+}
 
 function testPricing() {
   assert.strictEqual(calculateParkingFee(60, seedParkingLots[0].pricing), 0);
@@ -86,6 +97,75 @@ function testRecommendation() {
   assert.strictEqual(threeHours[0].fee, 10);
   assert.strictEqual(newEnergyThreeHours.find((item) => item.id === "office-half-hour").fee, 6);
   assert.strictEqual(farAway.length, 0);
+  assert.ok(oneHour.every((item) => item.tags.every((tag) => !/车位|余位|满位/.test(tag))));
+  assert.doesNotMatch(buildRecommendationSummary(threeHours), /车位|余位/);
+}
+
+function testRecommendationSortingAndPaging() {
+  const recommendations = [
+    { id: "balanced", score: 1, fee: 12, distanceMeters: 300, walkingMinutes: 4 },
+    { id: "cheap-far", score: 6, fee: 4, distanceMeters: 900, walkingMinutes: 12 },
+    { id: "close-expensive", score: 5, fee: 16, distanceMeters: 120, walkingMinutes: 2 },
+    { id: "cheap-close", score: 7, fee: 4, distanceMeters: 240, walkingMinutes: 3 }
+  ];
+
+  assert.deepStrictEqual(
+    sortRecommendationsByMode(recommendations, "comprehensive").map((item) => item.id),
+    ["balanced", "close-expensive", "cheap-far", "cheap-close"]
+  );
+  assert.deepStrictEqual(
+    sortRecommendationsByMode(recommendations, "distance").map((item) => item.id),
+    ["close-expensive", "cheap-close", "balanced", "cheap-far"]
+  );
+  assert.deepStrictEqual(
+    sortRecommendationsByMode(recommendations, "price").map((item) => item.id),
+    ["cheap-close", "cheap-far", "balanced", "close-expensive"]
+  );
+
+  const manyRecommendations = Array.from({ length: 23 }, (_, index) => ({ id: `lot-${index + 1}` }));
+  const firstPage = paginateRecommendations(manyRecommendations, 10, 10);
+  const thirdPage = paginateRecommendations(manyRecommendations, 30, 10);
+
+  assert.strictEqual(firstPage.items.length, 10);
+  assert.strictEqual(firstPage.hasMore, true);
+  assert.strictEqual(thirdPage.items.length, 23);
+  assert.strictEqual(thirdPage.hasMore, false);
+}
+
+function testUiLayoutStructure() {
+  const indexWxml = readProjectFile("pages/index/index.wxml");
+  const indexWxss = readProjectFile("pages/index/index.wxss");
+  const detailWxml = readProjectFile("pages/detail/detail.wxml");
+  const vehiclesWxml = readProjectFile("pages/vehicles/vehicles.wxml");
+  const addWxml = readProjectFile("pages/add/add.wxml");
+
+  assert.match(indexWxml, /class="workbench-summary/);
+  assert.match(indexWxml, /class="workbench-config-row/);
+  assert.match(indexWxml, /class="first-recommendation-preview/);
+  assert.match(indexWxml, /class="map-top-actions/);
+  assert.match(indexWxml, /class="map-add-action/);
+  assert.match(indexWxml, /class="recommendation-sort-trigger/);
+  assert.match(indexWxml, /class="recommendation-sort-menu/);
+  assert.match(indexWxml, /bindscrolltolower="loadMoreRecommendations"/);
+  assert.match(indexWxml, /wx:for="\{\{visibleRecommendations\}\}"/);
+  assert.match(indexWxml, /我是有底线的/);
+  assert.match(indexWxml, /class="map-mini-icon expand-mini-icon/);
+  assert.match(indexWxml, /class="map-mini-icon locate-mini-icon/);
+  assert.doesNotMatch(indexWxml, /余位最多/);
+  assert.doesNotMatch(indexWxml, /availabilityText/);
+  assert.doesNotMatch(indexWxml, /compact-top-actions/);
+  assert.strictEqual((indexWxml.match(/class="quick-control/g) || []).length, 0);
+  assert.strictEqual((indexWxml.match(/class="quick-summary-item/g) || []).length, 3);
+  assert.match(indexWxss, /\.map-round-button\s*\{[\s\S]*width: 60rpx;[\s\S]*height: 60rpx;[\s\S]*border-radius: 50%;/);
+
+  assert.match(detailWxml, /class="detail-hero/);
+  assert.match(detailWxml, /class="detail-primary-panel/);
+
+  assert.match(vehiclesWxml, /class="vehicles-header/);
+  assert.match(vehiclesWxml, /class="vehicle-card-main/);
+
+  assert.match(addWxml, /class="form-step/);
+  assert.match(addWxml, /class="step-number/);
 }
 
 function testRecognitionParsing() {
@@ -716,6 +796,8 @@ async function testSenseNovaClient() {
 async function run() {
   testPricing();
   testRecommendation();
+  testRecommendationSortingAndPaging();
+  testUiLayoutStructure();
   testRecognitionParsing();
   testServerAuthHelpers();
   testTokenRequiredLoginState();
