@@ -51,10 +51,12 @@
       aria-role="button"
       aria-label="放大地图"
     >
-      <text class="expand-corner expand-corner-tl"></text>
-      <text class="expand-corner expand-corner-tr"></text>
-      <text class="expand-corner expand-corner-bl"></text>
-      <text class="expand-corner expand-corner-br"></text>
+      <view class="map-mini-icon expand-mini-icon">
+        <view class="mini-corner mini-corner-tl"></view>
+        <view class="mini-corner mini-corner-tr"></view>
+        <view class="mini-corner mini-corner-bl"></view>
+        <view class="mini-corner mini-corner-br"></view>
+      </view>
     </view>
     <view
       class="map-round-button locate-control"
@@ -63,13 +65,11 @@
       aria-role="button"
       aria-label="定位到当前位置"
     >
-      <view class="locate-orb">
-        <view class="locate-ring locate-ring-outer"></view>
-        <view class="locate-ring locate-ring-inner"></view>
-        <view class="locate-axis locate-axis-x"></view>
-        <view class="locate-axis locate-axis-y"></view>
-        <view class="locate-arrow"></view>
-        <view class="locate-dot"></view>
+      <view class="map-mini-icon locate-mini-icon">
+        <view class="mini-axis mini-axis-x"></view>
+        <view class="mini-axis mini-axis-y"></view>
+        <view class="mini-ring"></view>
+        <view class="mini-dot"></view>
       </view>
     </view>
   </view>
@@ -130,7 +130,7 @@
             <view class="preview-rank">{{item.rank}}</view>
             <view class="preview-main">
               <text class="preview-name">{{item.name}}</text>
-              <text class="preview-meta">{{item.distanceText}} · 步行约 {{item.walkingMinutes}} 分钟 · {{item.availabilityText}}</text>
+              <text class="preview-meta">{{item.distanceText}} · 步行约 {{item.walkingMinutes}} 分钟</text>
             </view>
             <view class="preview-price">
               <text class="preview-fee">{{item.feeText}}</text>
@@ -148,6 +148,8 @@
     <scroll-view
       class="sheet-scroll"
       scroll-y="{{sheetExpanded}}"
+      lower-threshold="96"
+      bindscrolltolower="loadMoreRecommendations"
     >
       <view class="sheet-content">
         <view wx:if="{{sheetExpanded}}" class="expanded-controls">
@@ -248,13 +250,35 @@
         </view>
 
         <view class="list-header">
-          <text class="section-title">附近停车场</text>
+          <view class="recommendation-sort">
+            <view
+              class="recommendation-sort-trigger {{sortDropdownOpen ? 'is-open' : ''}}"
+              bindtap="toggleSortDropdown"
+              aria-role="button"
+              aria-label="切换排序"
+            >
+              <text>{{recommendationSortText}}</text>
+              <text class="sort-chevron"></text>
+            </view>
+            <view wx:if="{{sortDropdownOpen}}" class="recommendation-sort-menu">
+              <view
+                wx:for="{{recommendationSortOptions}}"
+                wx:key="value"
+                class="recommendation-sort-option {{item.value === recommendationSortMode ? 'is-active' : ''}}"
+                data-mode="{{item.value}}"
+                bindtap="setRecommendationSortMode"
+              >
+                <text class="sort-check">{{item.value === recommendationSortMode ? '✓' : ''}}</text>
+                <text>{{item.label}}</text>
+              </view>
+            </view>
+          </view>
           <text class="muted">{{recommendations.length}} 个停车场</text>
         </view>
 
         <block wx:if="{{hasRecommendations}}">
           <view
-            wx:for="{{recommendations}}"
+            wx:for="{{visibleRecommendations}}"
             wx:key="id"
             class="lot-card {{item.bestClass}}"
           >
@@ -277,7 +301,6 @@
             <view class="metric-row">
               <text>距目的地 {{item.distanceText}}</text>
               <text>步行约 {{item.walkingMinutes}} 分钟</text>
-              <text>{{item.availabilityText}}</text>
             </view>
 
             <view class="tag-row">
@@ -304,6 +327,9 @@
               <button class="primary-button action-button" data-id="{{item.id}}" bindtap="openNavigation">导航</button>
               <button class="ghost-button action-button" data-id="{{item.id}}" bindtap="goDetail">详情</button>
             </view>
+          </view>
+          <view class="load-more-line {{hasMoreRecommendations ? '' : 'is-end'}}">
+            {{hasMoreRecommendations ? '继续下拉加载更多' : '我是有底线的'}}
           </view>
         </block>
 

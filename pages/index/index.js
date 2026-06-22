@@ -1,4 +1,10 @@
-const { buildRecommendationSummary, recommendParkingLots } = require("../../utils/recommendation");
+const {
+  RECOMMENDATION_PAGE_SIZE,
+  buildRecommendationSummary,
+  paginateRecommendations,
+  recommendParkingLots,
+  sortRecommendationsByMode
+} = require("../../utils/recommendation");
 const {
   getLoggedInUser,
   updateCurrentUserProfile,
@@ -27,25 +33,11 @@ const SHEET_DRAG_THRESHOLD = 56;
 const MAP_VISIBLE_GAP = 0;
 const MAP_GESTURE_RESTORE_MS = 80;
 
-const recommendationModes = [
+const recommendationSortOptions = [
+  { value: "comprehensive", label: "综合排序" },
   { value: "distance", label: "距离最近" },
-  { value: "availability", label: "余位最多" },
-  { value: "price", label: "均价最低" }
+  { value: "price", label: "低价优先" }
 ];
-
-const AVAILABILITY_PRIORITY = {
-  high: 0,
-  medium: 1,
-  unknown: 2,
-  low: 3
-};
-
-const AVAILABILITY_TEXT = {
-  high: "余位较多",
-  medium: "余位一般",
-  low: "车位紧张",
-  unknown: "余位待确认"
-};
 
 function buildDurationOptions(maxValue, unit, pad) {
   return Array.from({ length: maxValue + 1 }, (_, value) => ({
@@ -111,8 +103,7 @@ function decorateRecommendation(lot) {
     ...lot,
     parkingType,
     parkingTypeText: parkingType === "street" ? "路内" : "路外",
-    parkingTypeClass: parkingType === "street" ? "is-street" : "is-offstreet",
-    availabilityText: AVAILABILITY_TEXT[lot.availability || "unknown"] || AVAILABILITY_TEXT.unknown
+    parkingTypeClass: parkingType === "street" ? "is-street" : "is-offstreet"
   };
 }
 
@@ -121,29 +112,22 @@ function filterLotsByScope(lots, scope) {
   return lots.filter((lot) => detectParkingType(lot) === scope);
 }
 
-function sortRecommendations(recommendations, mode) {
-  const sorted = recommendations.slice().sort((a, b) => {
-    if (mode === "price") {
-      return a.fee - b.fee
-        || a.distanceMeters - b.distanceMeters
-        || AVAILABILITY_PRIORITY[a.availability || "unknown"] - AVAILABILITY_PRIORITY[b.availability || "unknown"];
-    }
-    if (mode === "availability") {
-      return AVAILABILITY_PRIORITY[a.availability || "unknown"] - AVAILABILITY_PRIORITY[b.availability || "unknown"]
-        || a.distanceMeters - b.distanceMeters
-        || a.fee - b.fee;
-    }
-    return a.distanceMeters - b.distanceMeters
-      || a.fee - b.fee
-      || AVAILABILITY_PRIORITY[a.availability || "unknown"] - AVAILABILITY_PRIORITY[b.availability || "unknown"];
-  });
+function getRecommendationSortText(mode) {
+  const option = recommendationSortOptions.find((item) => item.value === mode);
+  return option ? option.label : recommendationSortOptions[0].label;
+}
 
-  return sorted.map((item, index) => ({
-    ...decorateRecommendation(item),
-    rank: index + 1,
-    isBest: index === 0,
-    bestClass: index === 0 ? "is-best" : ""
-  }));
+function sortAndDecorateRecommendations(recommendations, mode) {
+  return sortRecommendationsByMode(recommendations, mode).map(decorateRecommendation);
+}
+
+function buildVisibleRecommendationState(recommendations, limit) {
+  const page = paginateRecommendations(recommendations, limit, RECOMMENDATION_PAGE_SIZE);
+  return {
+    visibleRecommendations: page.items,
+    visibleRecommendationLimit: page.items.length || RECOMMENDATION_PAGE_SIZE,
+    hasMoreRecommendations: page.hasMore
+  };
 }
 
 Page({
@@ -152,8 +136,10 @@ Page({
     accountStatusText: "游客模式",
     accountActionText: "登录",
     accountStatusClass: "is-guest",
-    recommendationModes,
-    recommendationMode: "distance",
+    recommendationSortOptions,
+    recommendationSortMode: "comprehensive",
+    recommendationSortText: "综合排序",
+    sortDropdownOpen: false,
     parkingScope: "all",
     mapExpanded: false,
     sheetExpanded: false,
@@ -192,7 +178,10 @@ Page({
     mapMarkers: [],
     mapPoints: [],
     recommendations: [],
+    visibleRecommendations: [],
+    visibleRecommendationLimit: RECOMMENDATION_PAGE_SIZE,
     hasRecommendations: false,
+    hasMoreRecommendations: false,
     summary: "正在定位当前位置。",
     emptyText: "定位成功后会自动推荐附近停车场。",
     loading: false
@@ -543,7 +532,10 @@ Page({
       this.setData({
         hasDestination: false,
         recommendations: [],
+        visibleRecommendations: [],
+        visibleRecommendationLimit: RECOMMENDATION_PAGE_SIZE,
         hasRecommendations: false,
+        hasMoreRecommendations: false,
         mapMarkers: [],
         mapPoints: [],
         summary: this.data.locating ? "正在定位当前位置。" : "请选择目的地后查看附近停车推荐。",
@@ -563,7 +555,10 @@ Page({
       this._lots = [];
       this.setData({
         recommendations: [],
+        visibleRecommendations: [],
+        visibleRecommendationLimit: RECOMMENDATION_PAGE_SIZE,
         hasRecommendations: false,
+        hasMoreRecommendations: false,
         mapMarkers: [],
         mapPoints: [],
         summary: "线上接口加载失败，请检查网络或后端服务。",
@@ -584,13 +579,15 @@ Page({
       vehicleType: this.data.currentVehicle ? this.data.currentVehicle.vehicleType : "",
       preferences: { walkMinuteValue: 0.8 }
     });
-    const recommendations = sortRecommendations(baseRecommendations, this.data.recommendationMode);
+    const recommendations = sortAndDecorateRecommendations(baseRecommendations, this.data.recommendationSortMode);
     const mapState = this.buildMapState(destination, recommendations);
+    const visibleState = buildVisibleRecommendationState(recommendations, RECOMMENDATION_PAGE_SIZE);
 
     this.setData({
       hasLocation: Boolean(app.globalData.userLocation),
       hasDestination: true,
       recommendations,
+      ...visibleState,
       hasRecommendations: recommendations.length > 0,
       summary: buildRecommendationSummary(recommendations),
       emptyText: "目的地 3 公里内没有匹配的停车场。可以清空筛选词，或先录入附近停车场。",
@@ -621,7 +618,7 @@ Page({
       vehicleType: this.data.currentVehicle ? this.data.currentVehicle.vehicleType : "",
       preferences: { walkMinuteValue: 0.8 }
     });
-    const sortedResults = sortRecommendations(results, this.data.recommendationMode).slice(0, 5);
+    const sortedResults = sortAndDecorateRecommendations(results, this.data.recommendationSortMode).slice(0, 5);
 
     this.setData({
       parkingSearchResults: sortedResults,
@@ -690,11 +687,38 @@ Page({
     });
   },
 
-  setRecommendationMode(event) {
+  toggleSortDropdown() {
+    this.setData({ sortDropdownOpen: !this.data.sortDropdownOpen });
+  },
+
+  closeSortDropdown() {
+    if (this.data.sortDropdownOpen) {
+      this.setData({ sortDropdownOpen: false });
+    }
+  },
+
+  setRecommendationSortMode(event) {
     const mode = event.currentTarget.dataset.mode;
-    if (!mode || mode === this.data.recommendationMode) return;
-    this.setData({ recommendationMode: mode });
-    this.refreshRecommendations();
+    if (!mode) return;
+    const recommendations = sortAndDecorateRecommendations(this.data.recommendations, mode);
+    const mapState = this.data.hasDestination
+      ? this.buildMapState(app.globalData.destination, recommendations)
+      : {};
+    this.setData({
+      recommendationSortMode: mode,
+      recommendationSortText: getRecommendationSortText(mode),
+      sortDropdownOpen: false,
+      recommendations,
+      ...buildVisibleRecommendationState(recommendations, RECOMMENDATION_PAGE_SIZE),
+      summary: buildRecommendationSummary(recommendations),
+      ...mapState
+    });
+  },
+
+  loadMoreRecommendations() {
+    if (!this.data.sheetExpanded || !this.data.hasMoreRecommendations) return;
+    const nextLimit = this.data.visibleRecommendationLimit + RECOMMENDATION_PAGE_SIZE;
+    this.setData(buildVisibleRecommendationState(this.data.recommendations, nextLimit));
   },
 
   onDestinationInput(event) {
