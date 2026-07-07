@@ -1,6 +1,4 @@
-const { apiConfig, cloudbaseConfig } = require("../config/api");
-
-let cloudClientPromise = null;
+const { apiConfig } = require("../config/api");
 
 // ---------------------------------------------------------------------------
 // Token management
@@ -31,7 +29,7 @@ function clearToken() {
 }
 
 // ---------------------------------------------------------------------------
-// Existing helpers (preserved for recognition API)
+// Request helpers
 // ---------------------------------------------------------------------------
 
 function buildApiError(response, fallback) {
@@ -51,13 +49,6 @@ function validateOkResponse(response) {
   throw buildApiError(response);
 }
 
-function buildCloudHeaders(extraHeaders) {
-  return {
-    "X-WX-SERVICE": cloudbaseConfig.serviceName,
-    ...(extraHeaders || {})
-  };
-}
-
 function createRequestId(prefix) {
   return `${prefix || "req"}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
@@ -70,7 +61,7 @@ function estimateBase64Bytes(base64) {
 }
 
 function summarizeRequestData(path, data) {
-  if (path === cloudbaseConfig.recognitionPath) {
+  if (path === "/api/recognize-parking") {
     const photos = Array.isArray(data && data.photos) ? data.photos : [];
     const photoRefs = Array.isArray(data && data.photoRefs) ? data.photoRefs : [];
     return {
@@ -176,118 +167,19 @@ function requestWithWxRequest(options) {
   });
 }
 
-function getCloudClient() {
-  if (!cloudbaseConfig.envId) {
-    throw new Error("请先在 config/api.js 填写 cloudbaseConfig.envId");
-  }
-  if (!cloudbaseConfig.serviceName) {
-    throw new Error("请先在 config/api.js 填写 cloudbaseConfig.serviceName");
-  }
-  if (!wx.cloud || !wx.cloud.Cloud) {
-    throw new Error("当前基础库不支持 wx.cloud.Cloud，请升级微信开发者工具基础库");
-  }
-
-  if (!cloudClientPromise) {
-    const client = new wx.cloud.Cloud({
-      resourceEnv: cloudbaseConfig.envId
-    });
-    cloudClientPromise = client.init().then(() => client);
-  }
-
-  return cloudClientPromise;
-}
-
-function resetCloudClientForTests() {
-  cloudClientPromise = null;
-}
-
-async function requestWithCloudBase(options) {
-  const client = await getCloudClient();
-  const requestId = options.requestId || createRequestId("cloud");
-  const startedAt = Date.now();
-  const callOptions = {
-    path: options.path,
-    method: options.method || "POST",
-    data: options.data,
-    header: {
-      ...buildCloudHeaders(options.header),
-      "content-type": "application/json",
-      "X-Request-Id": requestId
-    },
-    dataType: "json",
-    timeout: options.timeout || apiConfig.requestTimeoutMs
-  };
-
-  logApiDebug("callContainer:start", {
-    requestId,
-    envId: cloudbaseConfig.envId,
-    serviceName: cloudbaseConfig.serviceName,
-    path: callOptions.path,
-    method: callOptions.method,
-    timeout: callOptions.timeout,
-    summary: summarizeRequestData(options.path, options.data)
-  });
-
-  let response;
-  try {
-    response = await client.callContainer(callOptions);
-  } catch (error) {
-    error.requestId = error.requestId || requestId;
-    console.error("[mini-parking api] callContainer:fail", {
-      requestId,
-      errMsg: error.errMsg,
-      message: error.message,
-      errno: error.errno,
-      code: error.code,
-      durationMs: Date.now() - startedAt
-    });
-    throw error;
-  }
-
-  try {
-    const data = validateOkResponse(response);
-    logApiDebug("callContainer:success", {
-      requestId,
-      statusCode: response.statusCode,
-      durationMs: Date.now() - startedAt,
-      mode: data.mode
-    });
-    return data;
-  } catch (error) {
-    error.requestId = error.requestId || requestId;
-    console.error("[mini-parking api] callContainer:bad-response", {
-      requestId,
-      statusCode: response && response.statusCode,
-      code: error.code,
-      message: error.message,
-      data: response && response.data,
-      durationMs: Date.now() - startedAt
-    });
-    throw error;
-  }
-}
-
 function requestApi(options) {
-  if (cloudbaseConfig.enabled) {
-    return requestWithCloudBase(options);
-  }
-
   return requestWithWxRequest(options);
 }
 
 function requestParkingRecognition(payload, options) {
   const opts = options || {};
   const requestId = opts.requestId || createRequestId("recognition");
-  return requestApi({
-    url: apiConfig.recognitionApiUrl,
-    path: cloudbaseConfig.recognitionPath,
-    method: "POST",
-    timeout: apiConfig.recognitionTimeoutMs || apiConfig.requestTimeoutMs,
+  return request("POST", "/api/recognize-parking", {
+    ...(payload || {}),
+    requestId
+  }, {
     requestId,
-    data: {
-      ...(payload || {}),
-      requestId
-    }
+    timeout: apiConfig.recognitionTimeoutMs || apiConfig.requestTimeoutMs
   });
 }
 
@@ -303,49 +195,6 @@ function request(method, path, data, options) {
     "X-Request-Id": requestId,
     ...(opts.header || {})
   });
-
-  if (cloudbaseConfig.enabled) {
-    logApiDebug("callContainer:api-start", {
-      requestId,
-      path,
-      method,
-      timeout: opts.timeout || apiConfig.requestTimeoutMs,
-      summary: summarizeRequestData(path, data)
-    });
-    return getCloudClient().then((client) => client.callContainer({
-      path,
-      method,
-      data,
-      header: buildCloudHeaders(header),
-      dataType: "json",
-      timeout: opts.timeout || apiConfig.requestTimeoutMs
-    })).then((res) => {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        logApiDebug("callContainer:api-success", {
-          requestId,
-          path,
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt
-        });
-        return res.data;
-      }
-      throw buildApiError(res, "请求失败");
-    }).catch((error) => {
-      error.requestId = error.requestId || requestId;
-      console.error("[mini-parking api] callContainer:api-fail", {
-        requestId,
-        path,
-        method,
-        statusCode: error.statusCode,
-        code: error.code,
-        errMsg: error.errMsg,
-        message: error.message,
-        durationMs: Date.now() - startedAt
-      });
-      throw error;
-    });
-  }
-
   const baseUrl = apiConfig.baseUrl || "http://127.0.0.1:8787";
   const url = baseUrl + path;
   logApiDebug("wx.request:api-start", {
@@ -501,82 +350,9 @@ function inferMediaType(filePath) {
   return "image/jpeg";
 }
 
-function readFileAsBase64(filePath) {
-  return new Promise((resolve, reject) => {
-    wx.getFileSystemManager().readFile({
-      filePath,
-      encoding: "base64",
-      success(res) {
-        resolve(res.data);
-      },
-      fail(err) {
-        reject(new Error(err.errMsg || "图片读取失败"));
-      }
-    });
-  });
-}
-
-function readFileAsArrayBuffer(filePath) {
-  return new Promise((resolve, reject) => {
-    wx.getFileSystemManager().readFile({
-      filePath,
-      success(res) {
-        resolve(res.data);
-      },
-      fail(err) {
-        reject(new Error(err.errMsg || "图片读取失败"));
-      }
-    });
-  });
-}
-
 async function uploadImage(filePath, options) {
   const opts = options || {};
   const requestId = opts.requestId || createRequestId("upload");
-
-  if (cloudbaseConfig.enabled) {
-    const filename = getFilename(filePath);
-    const mediaType = inferMediaType(filePath);
-    logApiDebug("upload:cloud-token-start", {
-      requestId,
-      filename,
-      mediaType
-    });
-
-    const tokenResult = await request("POST", "/api/upload-token", {
-      filename,
-      mediaType
-    }, { requestId });
-
-    if (!tokenResult || !tokenResult.signedUrl || !tokenResult.uploadedUrl) {
-      const error = new Error("图片上传失败：上传凭证无效。");
-      error.requestId = requestId;
-      throw error;
-    }
-
-    logApiDebug("upload:cloud-direct-start", {
-      requestId,
-      storageBucket: tokenResult.storageBucket,
-      storagePath: tokenResult.storagePath
-    });
-
-    await uploadFileToSignedUrl({
-      requestId,
-      filePath,
-      signedUrl: tokenResult.signedUrl,
-      mediaType,
-      timeout: opts.timeout || apiConfig.requestTimeoutMs
-    });
-
-    logApiDebug("upload:cloud-direct-success", {
-      requestId,
-      uploadedUrl: tokenResult.uploadedUrl,
-      storageBucket: tokenResult.storageBucket,
-      storagePath: tokenResult.storagePath
-    });
-    return tokenResult;
-  }
-
   const path = "/api/upload";
   const baseUrl = apiConfig.baseUrl || "http://127.0.0.1:8787";
   const url = baseUrl + path;
@@ -600,7 +376,7 @@ async function uploadImage(filePath, options) {
       filePath,
       name: "file",
       header,
-      timeout: apiConfig.requestTimeoutMs,
+      timeout: opts.timeout || apiConfig.requestTimeoutMs,
       success(res) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
@@ -651,73 +427,26 @@ async function uploadImage(filePath, options) {
   });
 }
 
-function uploadFileToSignedUrl({ requestId, filePath, signedUrl, mediaType, timeout }) {
-  return readFileAsArrayBuffer(filePath).then((fileBuffer) => new Promise((resolve, reject) => {
-    wx.request({
-      url: signedUrl,
-      method: "PUT",
-      data: fileBuffer,
-      header: {
-        "content-type": mediaType || "image/jpeg",
-        "cache-control": "max-age=3600"
-      },
-      timeout,
-      success(res) {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res);
-          return;
-        }
-        const error = new Error("Supabase 图片直传失败");
-        error.statusCode = res.statusCode;
-        error.requestId = requestId;
-        console.error("[mini-parking api] upload:cloud-direct-bad-response", {
-          requestId,
-          statusCode: res.statusCode,
-          data: res.data
-        });
-        reject(error);
-      },
-      fail(err) {
-        const error = new Error(err.errMsg || "Supabase 图片直传失败");
-        error.requestId = requestId;
-        console.error("[mini-parking api] upload:cloud-direct-fail", {
-          requestId,
-          errMsg: err.errMsg
-        });
-        reject(error);
-      }
-    });
-  }));
-}
-
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
 module.exports = {
-  // Existing exports
   requestApi,
   requestParkingRecognition,
-  resetCloudClientForTests,
-  // Token management
   getToken,
   setToken,
   clearToken,
-  // Generic request
   request,
-  // Auth
   login,
-  // Parking lots
   getParkingLots,
   getParkingLotDetail,
   createParkingLot,
   updateParkingLot,
   voteParkingLot,
-  // Vehicles
   getVehicles,
   addVehicle,
   updateVehicle,
   deleteVehicle,
-  // Upload
   uploadImage
 };

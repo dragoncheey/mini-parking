@@ -2,7 +2,7 @@
 
 ## Context
 
-The mini program currently sends production traffic through Tencent CloudBase. The Node API is already containerized, while PostgreSQL data and evidence photos are stored in the hosted Supabase project. The target environment is a mainland China Ubuntu/Debian server with Docker installed. No production domain is available yet.
+The mini program currently sends production traffic through Tencent CloudBase. The Node API is already containerized, while PostgreSQL data and evidence photos are stored in the hosted Supabase project. The target environment is a mainland China Ubuntu/Debian server with Docker installed. The production API domain is `parking.kuaidianfanfan.com`.
 
 This migration moves the API runtime and HTTPS ingress from CloudBase to the self-managed server. Supabase remains the database and object-storage provider.
 
@@ -174,7 +174,7 @@ The server environment contract is:
 5. Add the API hostname to the mini program's request and upload-file legal-domain lists. Keep the Supabase project hostname allowed for evidence-image access where required by the WeChat configuration.
 6. Build a trial version, execute end-to-end acceptance tests, and then release.
 
-The absence of a filed domain blocks Phase 2 release, but it does not block code migration or Phase 1 server verification.
+Phase 2 release requires DNS for `parking.kuaidianfanfan.com`, valid HTTPS from Caddy, and WeChat legal-domain configuration before trial or production mini-program traffic is sent to the self-hosted API.
 
 ## Testing and acceptance
 

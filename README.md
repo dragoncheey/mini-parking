@@ -51,7 +51,7 @@ cp .env.example .env
 npm run dev:api
 ```
 
-服务会自动读取项目根目录的 `.env`，已存在的系统环境变量优先级更高。小程序端本地默认请求 `http://127.0.0.1:8787`，配置在 `config/api.js`。
+服务会自动读取项目根目录的 `.env`，已存在的系统环境变量优先级更高。当前小程序端生产配置请求 `https://parking.kuaidianfanfan.com`，配置在 `config/api.js`。本地联调时可临时把 `API_BASE_URL` 改为 `http://127.0.0.1:8787`，并在微信开发者工具中使用开发环境的域名校验设置。
 
 主要接口：
 
@@ -79,29 +79,16 @@ MODEL_API_MOCK=0
 
 当前识别默认使用支持图片输入的 `sensenova-6.7-flash-lite`，通过 SenseNova OpenAI 兼容接口 `POST https://token.sensenova.cn/v1/chat/completions` 调用。服务端会把小程序上传的照片 base64 转为 `image_url` data URL，多张图片会和文本提示一起发送给模型。
 
-## CloudBase 云托管
+## Deployment
 
-项目根目录已加入 `Dockerfile`，可把当前 Node 后端部署为 CloudBase 云托管服务。推荐服务名：
+Production API traffic is served from `https://parking.kuaidianfanfan.com`.
 
-```text
-mini-parking-api
-```
+- Runtime: Docker Compose on the self-owned server
+- HTTPS/reverse proxy: Caddy
+- Database and evidence photos: hosted Supabase
+- Deployment runbook: `docs/self-hosted-deployment.md`
 
-上线后编辑 `config/api.js`，把 `cloudbaseConfig.enabled` 改为 `true`，并填入云开发环境 ID：
-
-```js
-const cloudbaseConfig = {
-  enabled: true,
-  envId: "你的云开发环境 ID",
-  serviceName: "mini-parking-api",
-  recognitionPath: "/api/recognize-parking",
-  supabaseUrl: "你的 Supabase Project URL"
-};
-```
-
-小程序端会通过 `wx.cloud.callContainer` 访问云托管，并带上 `X-WX-SERVICE` 服务名。更完整的部署步骤见 `docs/cloudbase-run.md`。
-
-`cloudbaseConfig.enabled` 打开后，登录、停车场、车辆、投票和识别都会走同一个云托管容器。本地开发时保持 `enabled: false` 即可继续使用 `wx.request` / `wx.uploadFile` 请求本地 `127.0.0.1:8787`。云端图片上传采用两段式：小程序先向云托管请求 `/api/upload-token` 获取 Supabase Storage signed upload URL，再用 `wx.request` PUT 直传 Supabase，避免大图 base64 触发 `cloud.callContainer -606001`。微信公众平台需要把 Supabase 项目域名加入 request 合法域名，例如 `https://dnwmoojwvosyfnlgsfmk.supabase.co`。服务端仍用 `SUPABASE_SERVICE_KEY` 创建上传凭证和读取图片；可用 `SUPABASE_STORAGE_BUCKET` 覆盖默认 bucket 名。
+Tencent CloudBase is no longer part of the production runtime.
 
 ## 数据模型
 

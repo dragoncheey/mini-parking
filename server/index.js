@@ -4,12 +4,13 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { loadLocalEnv } = require("./env");
-const { extractCloudOpenid, extractOpenid, generateToken } = require("./auth");
+const { extractOpenid, generateToken, getAuthTokenSecret } = require("./auth");
 const { buildMockRecognition } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("./modelClient");
 const db = require("./db");
 
 loadLocalEnv();
+getAuthTokenSecret();
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -117,7 +118,6 @@ const PUBLIC_ROUTES = [
   { method: "POST", prefix: "/api/login" },
   { method: "GET", prefix: "/health" },
   { method: "GET", prefix: "/" },
-  { method: "POST", prefix: "/api/recognize-parking" },
   { method: "GET", prefix: "/api/parking-lots" }, // list endpoint (no auth)
 ];
 
@@ -126,8 +126,6 @@ function isPublicRoute(method, pathname) {
   if ((method === "GET") && (pathname === "/" || pathname === "/health")) return true;
   // Exact match for /api/login
   if (method === "POST" && pathname === "/api/login") return true;
-  // Exact match for /api/recognize-parking
-  if (method === "POST" && pathname === "/api/recognize-parking") return true;
   // GET /api/parking-lots (list) and GET /api/parking-lots/:id (detail, optional auth)
   if (method === "GET" && pathname === "/api/parking-lots") return true;
   if (method === "GET" && pathname.startsWith("/api/parking-lots/") && !pathname.endsWith("/vote")) return true;
@@ -190,7 +188,16 @@ function parseMultipart(req) {
     const endDelimiter = Buffer.from(`--${boundary}--`);
 
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
+    let totalBytes = 0;
+    req.on("data", (chunk) => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_BODY_BYTES) {
+        reject(new Error("request body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("error", reject);
     req.on("end", () => {
       try {
@@ -321,15 +328,12 @@ async function readUploadedPhotoRef(photoRef) {
 
 async function handleLogin(req, res) {
   const { code, nickname, avatarUrl } = await readJsonBody(req);
-  const cloudOpenid = extractCloudOpenid(req);
 
-  if (!code && !cloudOpenid) {
+  if (!code) {
     return sendError(res, 400, "missing code", "MISSING_CODE");
   }
 
-  const { openid } = cloudOpenid
-    ? { openid: cloudOpenid }
-    : await wxCode2Session(code);
+  const { openid } = await wxCode2Session(code);
   let user = await db.findOrCreateUser(openid);
   if (nickname || avatarUrl) {
     user = await db.updateUserProfile(openid, { nickname, avatarUrl });
@@ -530,37 +534,6 @@ async function handleUpload(req, res) {
   sendJson(res, 201, upload);
 }
 
-async function handleUploadToken(req, res) {
-  const startedAt = Date.now();
-  const body = await readJsonBody(req);
-  const requestId = getRequestId(req, body);
-  const { filename, mediaType } = body;
-  logServerDebug("upload-token:start", {
-    requestId,
-    bodyBytes: body.__bodyBytes || 0,
-    filename,
-    mediaType
-  });
-
-  if (!filename) {
-    return sendError(res, 400, "filename is required", "MISSING_FILENAME", requestId);
-  }
-
-  const token = await db.createEvidencePhotoUploadToken({
-    filename,
-    mediaType
-  });
-
-  logServerDebug("upload-token:success", {
-    requestId,
-    durationMs: Date.now() - startedAt,
-    storageBucket: token.storageBucket,
-    storagePath: token.storagePath,
-    uploadedUrl: token.uploadedUrl
-  });
-  sendJson(res, 201, token);
-}
-
 async function handleRecognize(req, res) {
   const startedAt = Date.now();
   const payload = await readJsonBody(req);
@@ -674,7 +647,8 @@ function serveStaticFile(res, filepath) {
 // Main request handler
 // ---------------------------------------------------------------------------
 
-const server = http.createServer(async (req, res) => {
+function createAppServer() {
+  return http.createServer(async (req, res) => {
   let pathname = "";
   let method = req.method;
   let requestId = req.headers["x-request-id"] || "";
@@ -695,7 +669,7 @@ const server = http.createServer(async (req, res) => {
         routes: ["/health", "/api/recognize-parking", "/api/login",
           "/api/parking-lots", "/api/parking-lots/:id",
           "/api/parking-lots/:id/vote", "/api/vehicles",
-          "/api/vehicles/:id", "/api/upload", "/api/upload-token"]
+          "/api/vehicles/:id", "/api/upload"]
       });
       return;
     }
@@ -706,12 +680,6 @@ const server = http.createServer(async (req, res) => {
       // Prevent path traversal
       const safeName = path.basename(filename);
       serveStaticFile(res, path.join(UPLOADS_DIR, safeName));
-      return;
-    }
-
-    // POST /api/recognize-parking (no auth)
-    if (method === "POST" && pathname === "/api/recognize-parking") {
-      await handleRecognize(req, res);
       return;
     }
 
@@ -734,6 +702,12 @@ const server = http.createServer(async (req, res) => {
       if (!openid) {
         return sendError(res, 401, "unauthorized: missing or invalid token", "UNAUTHORIZED");
       }
+    }
+
+    // POST /api/recognize-parking (auth required)
+    if (method === "POST" && pathname === "/api/recognize-parking") {
+      await handleRecognize(req, res);
+      return;
     }
 
     // GET /api/parking-lots/:id (optional auth)
@@ -798,12 +772,6 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // POST /api/upload-token (auth required)
-    if (method === "POST" && pathname === "/api/upload-token") {
-      await handleUploadToken(req, res);
-      return;
-    }
-
     // 404
     sendError(res, 404, "not found", "NOT_FOUND");
   } catch (err) {
@@ -840,8 +808,22 @@ const server = http.createServer(async (req, res) => {
 
     sendError(res, 500, err.message || "internal server error", "INTERNAL_ERROR", requestId);
   }
-});
+  });
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`parking api listening on http://${HOST}:${PORT}`);
-});
+function startServer(port = PORT, host = HOST) {
+  const server = createAppServer();
+  server.listen(port, host, () => {
+    console.log(`parking api listening on http://${host}:${port}`);
+  });
+  return server;
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  createAppServer,
+  startServer
+};

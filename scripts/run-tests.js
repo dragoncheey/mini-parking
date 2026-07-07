@@ -11,8 +11,8 @@ const {
 } = require("../utils/recommendation");
 const { buildMockRecognition, normalizeRecognition, parseJsonFromText } = require("../utils/recognition");
 const { recognizeWithSenseNovaApi } = require("../server/modelClient");
-const { extractCloudOpenid, extractOpenid, generateToken } = require("../server/auth");
-const { cloudbaseConfig } = require("../config/api");
+const { decodeToken, extractOpenid, generateToken } = require("../server/auth");
+const { apiConfig } = require("../config/api");
 const db = require("../server/db");
 const api = require("../utils/api");
 const {
@@ -241,12 +241,75 @@ function testRecognitionParsing() {
   assert.strictEqual(flatMock.pricing.collectionMode, undefined);
 }
 
+function withAuthEnv(values, fn) {
+  const previous = {};
+  Object.keys(values).forEach((key) => {
+    previous[key] = process.env[key];
+    if (values[key] === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = values[key];
+    }
+  });
+
+  const restore = () => {
+    Object.keys(values).forEach((key) => {
+      if (previous[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previous[key];
+      }
+    });
+  };
+
+  try {
+    const result = fn();
+    if (result && typeof result.then === "function") {
+      return result.finally(restore);
+    }
+    restore();
+    return result;
+  } catch (error) {
+    restore();
+    throw error;
+  }
+}
+
 function testServerAuthHelpers() {
-  const token = generateToken("openid_1");
-  assert.strictEqual(extractOpenid({ headers: { authorization: `Bearer ${token}` } }), "openid_1");
-  assert.strictEqual(extractOpenid({ headers: {} }), null);
-  assert.strictEqual(extractCloudOpenid({ headers: { "x-wx-openid": "cloud_openid" } }), "cloud_openid");
-  assert.strictEqual(extractCloudOpenid({ headers: { "x-wx-from-openid": "from_openid" } }), "from_openid");
+  withAuthEnv({
+    AUTH_TOKEN_SECRET: "test-secret-for-hmac",
+    AUTH_TOKEN_TTL_SECONDS: "60"
+  }, () => {
+    const token = generateToken("openid_1", { nowMs: 1_700_000_000_000 });
+    assert.strictEqual(
+      extractOpenid({ headers: { authorization: `Bearer ${token}` } }, { nowMs: 1_700_000_001_000 }),
+      "openid_1"
+    );
+    assert.strictEqual(decodeToken(token, { nowMs: 1_700_000_001_000 }).openid, "openid_1");
+    assert.strictEqual(extractOpenid({ headers: {} }), null);
+
+    const tampered = token.replace(/.$/, token.endsWith("a") ? "b" : "a");
+    assert.strictEqual(extractOpenid({ headers: { authorization: `Bearer ${tampered}` } }), null);
+
+    const expired = generateToken("openid_2", {
+      nowMs: 1_700_000_000_000,
+      ttlSeconds: 1
+    });
+    assert.strictEqual(
+      extractOpenid({ headers: { authorization: `Bearer ${expired}` } }, { nowMs: 1_700_000_002_000 }),
+      null
+    );
+  });
+
+  withAuthEnv({
+    NODE_ENV: "production",
+    AUTH_TOKEN_SECRET: undefined
+  }, () => {
+    assert.throws(
+      () => generateToken("openid_3"),
+      /AUTH_TOKEN_SECRET is required/
+    );
+  });
 }
 
 function installWxStorageMock() {
@@ -457,10 +520,20 @@ function testVehicleNormalization() {
   assert.strictEqual(vehicles[0].vehicleTypeLabel, "新能源小型车");
 }
 
+function testSelfHostedApiConfiguration() {
+  const appJs = readProjectFile("app.js");
+  const configJs = readProjectFile("config/api.js");
+  const utilsApiJs = readProjectFile("utils/api.js");
+
+  assert.strictEqual(apiConfig.baseUrl, "https://parking.kuaidianfanfan.com");
+  assert.strictEqual(apiConfig.recognitionApiUrl, "https://parking.kuaidianfanfan.com/api/recognize-parking");
+  assert.doesNotMatch(appJs, /wx\.cloud/);
+  assert.doesNotMatch(configJs, /cloudbaseConfig|prod-d0g1zp7w0322a5d42|mini-parking-api/);
+  assert.doesNotMatch(utilsApiJs, /callContainer|X-WX-SERVICE|wx\.cloud|upload-token/);
+}
+
 async function testApiErrorMetadata() {
   installWxStorageMock();
-  const originalCloudbaseEnabled = cloudbaseConfig.enabled;
-  cloudbaseConfig.enabled = false;
   global.wx.request = (options) => {
     options.success({
       statusCode: 401,
@@ -482,118 +555,162 @@ async function testApiErrorMetadata() {
       }
     );
   } finally {
-    cloudbaseConfig.enabled = originalCloudbaseEnabled;
+    delete global.wx.request;
   }
 }
 
-async function testCloudbaseRecognitionTimeout() {
+async function testRecognitionUsesSelfHostedRequest() {
   installWxStorageMock();
-  const originalCloudbaseEnabled = cloudbaseConfig.enabled;
-  cloudbaseConfig.enabled = true;
+  wx.setStorageSync("auth_token", "signed-token");
   const calls = [];
-  global.wx.cloud = {
-    Cloud: function Cloud() {
-      return {
-        init() {
-          return Promise.resolve();
-        },
-        callContainer(options) {
-          calls.push(options);
-          return Promise.resolve({
-            statusCode: 200,
-            data: { ok: true, recognition: { name: "云托管识别" } }
-          });
-        }
-      };
-    }
+  global.wx.request = (options) => {
+    calls.push(options);
+    options.success({
+      statusCode: 200,
+      data: { ok: true, recognition: { name: "自有服务器识别" } }
+    });
   };
 
   try {
     const result = await api.requestParkingRecognition({
       photoRefs: [{
-        uploadedUrl: "/uploads/test.jpg",
+        uploadedUrl: "https://example.supabase.co/storage/v1/object/public/parking-evidence/evidence/photo.jpg",
+        storageBucket: "parking-evidence",
+        storagePath: "evidence/photo.jpg",
         mediaType: "image/jpeg"
       }]
     });
-    assert.strictEqual(result.recognition.name, "云托管识别");
+
+    assert.strictEqual(result.recognition.name, "自有服务器识别");
     assert.strictEqual(calls.length, 1);
-    assert.strictEqual(calls[0].path, cloudbaseConfig.recognitionPath);
-    assert.strictEqual(calls[0].header["X-WX-SERVICE"], cloudbaseConfig.serviceName);
+    assert.strictEqual(calls[0].url, "https://parking.kuaidianfanfan.com/api/recognize-parking");
+    assert.strictEqual(calls[0].method, "POST");
     assert.strictEqual(calls[0].timeout, 60000);
-    assert.deepStrictEqual(calls[0].data.photoRefs, [{
-      uploadedUrl: "/uploads/test.jpg",
-      mediaType: "image/jpeg"
-    }]);
-    assert.strictEqual(calls[0].data.photos, undefined);
+    assert.strictEqual(calls[0].header.Authorization, "Bearer signed-token");
+    assert.deepStrictEqual(calls[0].data.photoRefs[0].storagePath, "evidence/photo.jpg");
     assert.ok(calls[0].data.requestId);
   } finally {
-    cloudbaseConfig.enabled = originalCloudbaseEnabled;
-    api.resetCloudClientForTests();
-    delete global.wx.cloud;
+    delete global.wx.request;
   }
 }
 
-async function testCloudbaseUploadUsesSignedSupabaseUpload() {
+async function testUploadUsesSelfHostedMultipartEndpoint() {
   installWxStorageMock();
-  const originalCloudbaseEnabled = cloudbaseConfig.enabled;
-  cloudbaseConfig.enabled = true;
-  const containerCalls = [];
-  const requestCalls = [];
-  global.wx.cloud = {
-    Cloud: function Cloud() {
-      return {
-        init() {
-          return Promise.resolve();
-        },
-        callContainer(options) {
-          containerCalls.push(options);
-          return Promise.resolve({
-            statusCode: 200,
-            data: {
-              uploadedUrl: "https://example.supabase.co/storage/v1/object/public/parking-evidence/evidence/photo.jpg",
-              storageBucket: "parking-evidence",
-              storagePath: "evidence/photo.jpg",
-              signedUrl: "https://example.supabase.co/storage/v1/object/upload/sign/parking-evidence/evidence/photo.jpg?token=abc"
-            }
-          });
-        }
-      };
-    }
-  };
-  global.wx.getFileSystemManager = () => ({
-    readFile(options) {
-      assert.strictEqual(options.filePath, "/tmp/local-photo.jpg");
-      options.success({ data: Buffer.from("jpg") });
-    }
-  });
-  global.wx.request = (options) => {
-    requestCalls.push(options);
+  wx.setStorageSync("auth_token", "signed-token");
+  const uploadCalls = [];
+  global.wx.uploadFile = (options) => {
+    uploadCalls.push(options);
     options.success({
-      statusCode: 200,
-      data: { Key: "parking-evidence/evidence/photo.jpg" }
+      statusCode: 201,
+      data: JSON.stringify({
+        uploadedUrl: "https://example.supabase.co/storage/v1/object/public/parking-evidence/evidence/photo.jpg",
+        storageBucket: "parking-evidence",
+        storagePath: "evidence/photo.jpg"
+      })
     });
   };
 
   try {
     const result = await api.uploadImage("/tmp/local-photo.jpg");
-    assert.strictEqual(containerCalls.length, 1);
-    assert.strictEqual(containerCalls[0].path, "/api/upload-token");
-    assert.strictEqual(containerCalls[0].data.base64, undefined);
-    assert.strictEqual(containerCalls[0].data.filename, "local-photo.jpg");
-    assert.strictEqual(requestCalls.length, 1);
-    assert.strictEqual(requestCalls[0].url, "https://example.supabase.co/storage/v1/object/upload/sign/parking-evidence/evidence/photo.jpg?token=abc");
-    assert.strictEqual(requestCalls[0].method, "PUT");
-    assert.strictEqual(requestCalls[0].data.toString("utf8"), "jpg");
-    assert.strictEqual(requestCalls[0].header["content-type"], "image/jpeg");
-    assert.strictEqual(requestCalls[0].header["cache-control"], "max-age=3600");
-    assert.strictEqual(result.uploadedUrl, "https://example.supabase.co/storage/v1/object/public/parking-evidence/evidence/photo.jpg");
+    assert.strictEqual(uploadCalls.length, 1);
+    assert.strictEqual(uploadCalls[0].url, "https://parking.kuaidianfanfan.com/api/upload");
+    assert.strictEqual(uploadCalls[0].filePath, "/tmp/local-photo.jpg");
+    assert.strictEqual(uploadCalls[0].name, "file");
+    assert.strictEqual(uploadCalls[0].header.Authorization, "Bearer signed-token");
+    assert.strictEqual(uploadCalls[0].header["X-Request-Id"].startsWith("upload-"), true);
     assert.strictEqual(result.storagePath, "evidence/photo.jpg");
   } finally {
-    cloudbaseConfig.enabled = originalCloudbaseEnabled;
-    api.resetCloudClientForTests();
-    delete global.wx.cloud;
-    delete global.wx.request;
+    delete global.wx.uploadFile;
   }
+}
+
+function requestNodeServer(server, options, body) {
+  return new Promise((resolve, reject) => {
+    const { Readable } = require("stream");
+    const headers = {};
+    Object.entries(options.headers || {}).forEach(([key, value]) => {
+      headers[key.toLowerCase()] = value;
+    });
+    const payload = body
+      ? [Buffer.isBuffer(body) ? body : Buffer.from(String(body))]
+      : [];
+    const req = Readable.from(payload);
+    req.method = options.method || "GET";
+    req.url = options.path;
+    req.headers = headers;
+
+    const chunks = [];
+    const res = {
+      statusCode: 200,
+      headers: {},
+      writeHead(statusCode, responseHeaders) {
+        this.statusCode = statusCode;
+        this.headers = responseHeaders || {};
+      },
+      write(chunk) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+      },
+      end(chunk) {
+        if (chunk) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        }
+        const text = Buffer.concat(chunks).toString("utf8");
+        try {
+          resolve({
+            statusCode: this.statusCode,
+            data: text ? JSON.parse(text) : {}
+          });
+        } catch (error) {
+          reject(error);
+        }
+      }
+    };
+
+    server.emit("request", req, res);
+  });
+}
+
+async function testServerRoutesRequireAuthAndLimitMultipart() {
+  const { createAppServer } = require("../server/index");
+  await withAuthEnv({
+    AUTH_TOKEN_SECRET: "test-secret-for-hmac",
+    AUTH_TOKEN_TTL_SECONDS: "60"
+  }, async () => {
+    const recognition = await requestNodeServer(
+      createAppServer(),
+      {
+        path: "/api/recognize-parking",
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      },
+      JSON.stringify({ photos: [] })
+    );
+    assert.strictEqual(recognition.statusCode, 401);
+    assert.strictEqual(recognition.data.code, "UNAUTHORIZED");
+
+    const token = generateToken("openid_1");
+    const boundary = "----mini-parking-test-boundary";
+    const largeBody = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="large.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+      Buffer.alloc(8 * 1024 * 1024 + 1, "x"),
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ]);
+    const upload = await requestNodeServer(
+      createAppServer(),
+      {
+        path: "/api/upload",
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+          "content-length": largeBody.length
+        }
+      },
+      largeBody
+    );
+    assert.strictEqual(upload.statusCode, 413);
+    assert.strictEqual(upload.data.code, "BODY_TOO_LARGE");
+  });
 }
 
 async function testAddPageRetriesPhotoUploadBeforeRecognition() {
@@ -804,9 +921,11 @@ async function run() {
   await testOnlineParkingStorage();
   await testOnlineVehicleStorage();
   testVehicleNormalization();
+  testSelfHostedApiConfiguration();
   await testApiErrorMetadata();
-  await testCloudbaseRecognitionTimeout();
-  await testCloudbaseUploadUsesSignedSupabaseUpload();
+  await testRecognitionUsesSelfHostedRequest();
+  await testUploadUsesSelfHostedMultipartEndpoint();
+  await testServerRoutesRequireAuthAndLimitMultipart();
   await testAddPageRetriesPhotoUploadBeforeRecognition();
   await testSupabaseStorageUpload();
   await testSenseNovaClient();
