@@ -2,9 +2,11 @@ node_modules/
 .env
 .env.*
 !.env.example
+!.env.server.example
 npm-debug.log*
 dist/
 coverage/
 .DS_Store
 *.db
 .superpowers/
+.worktrees/
