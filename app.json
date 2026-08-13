@@ -1,15 +1,16 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/profile/profile",
     "pages/vehicles/vehicles",
     "pages/detail/detail",
     "pages/add/add"
   ],
   "window": {
     "navigationBarTitleText": "省心停车",
-    "navigationBarBackgroundColor": "#f8fafc",
+    "navigationBarBackgroundColor": "#f6f7f4",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f4f6f8"
+    "backgroundColor": "#f6f7f4"
   },
   "permission": {
     "scope.userLocation": {

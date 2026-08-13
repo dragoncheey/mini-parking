@@ -1,0 +1,77 @@
+<view class="page profile-page">
+  <view class="profile-hero {{isLoggedIn ? 'is-signed-in' : 'is-guest'}}">
+    <view class="profile-glow profile-glow-one"></view>
+    <view class="profile-glow profile-glow-two"></view>
+    <view class="profile-identity">
+      <view class="profile-avatar">
+        <image wx:if="{{user.avatarUrl}}" class="profile-avatar-image" src="{{user.avatarUrl}}" mode="aspectFill" />
+        <text wx:else>{{user.avatarText}}</text>
+      </view>
+      <view class="profile-copy">
+        <text class="profile-kicker">{{isLoggedIn ? '省心停车用户' : '欢迎使用省心停车'}}</text>
+        <text class="profile-name">{{user.nickname}}</text>
+        <text class="profile-caption">{{isLoggedIn ? '爱车与停车偏好已云端同步' : '登录后同步爱车，并管理你分享的信息'}}</text>
+      </view>
+    </view>
+
+    <button wx:if="{{!isLoggedIn}}" class="profile-login-button" loading="{{loading}}" bindtap="login">微信用户快捷登录</button>
+    <view wx:else class="profile-status-row">
+      <view class="profile-status-pill"><text class="status-dot"></text>已登录</view>
+      <view class="profile-update" bindtap="refreshProfile">更新头像昵称 ›</view>
+    </view>
+  </view>
+
+  <view wx:if="{{isLoggedIn}}" class="account-overview">
+    <view class="overview-item">
+      <text class="overview-value">{{vehicleCount}}</text>
+      <text class="overview-label">已绑定车辆</text>
+    </view>
+    <view class="overview-divider"></view>
+    <view class="overview-item overview-item-wide">
+      <text class="overview-value overview-vehicle">{{currentVehicleText}}</text>
+      <text class="overview-label">当前计费车辆</text>
+    </view>
+  </view>
+
+  <view class="profile-section">
+    <view class="section-heading">
+      <text class="section-kicker">常用服务</text>
+      <text class="section-title">停车工具</text>
+    </view>
+    <view class="service-grid">
+      <view class="service-card service-vehicle" bindtap="goVehicles">
+        <view class="service-icon">车</view>
+        <text class="service-title">我的爱车</text>
+        <text class="service-copy">设置当前计费车型</text>
+      </view>
+      <view class="service-card service-share" bindtap="goAdd">
+        <view class="service-icon">＋</view>
+        <text class="service-title">分享停车场</text>
+        <text class="service-copy">补充真实停车信息</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="profile-section account-section">
+    <view class="section-heading compact-heading">
+      <text class="section-title">账户与数据</text>
+    </view>
+    <view class="setting-row">
+      <view>
+        <text class="setting-title">数据同步</text>
+        <text class="setting-copy">车辆、上报与评价跟随当前账号</text>
+      </view>
+      <text class="setting-value">{{isLoggedIn ? '云端' : '登录后开启'}}</text>
+    </view>
+    <view class="setting-row">
+      <view>
+        <text class="setting-title">隐私说明</text>
+        <text class="setting-copy">头像昵称仅用于标记停车场信息来源</text>
+      </view>
+      <text class="setting-value">安全使用</text>
+    </view>
+  </view>
+
+  <button wx:if="{{isLoggedIn}}" class="logout-button" bindtap="logout">退出当前账号</button>
+  <view class="back-home" bindtap="goHome">返回停车推荐首页</view>
+</view>

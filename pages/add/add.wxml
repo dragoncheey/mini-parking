@@ -1,13 +1,20 @@
 <view class="page add-page">
   <view class="intro">
+    <text class="intro-kicker">{{isEditing ? '信息维护' : '共建停车数据'}}</text>
     <text class="intro-title">{{pageTitle}}</text>
     <text class="intro-text">{{introText}}</text>
+    <view class="intro-flow">
+      <text>照片</text><text class="flow-line"></text>
+      <text>地点</text><text class="flow-line"></text>
+      <text>收费</text><text class="flow-line"></text>
+      <text>发布</text>
+    </view>
   </view>
 
   <view wx:if="{{loginRequired}}" class="login-panel">
     <text class="login-title">需要登录后上报</text>
     <text class="login-copy">登录后保存的停车场会展示你的头像来源，后续也只有你可以维护修改。</text>
-    <button class="primary-button login-button" bindtap="loginAndContinue">登录并继续</button>
+    <button class="primary-button login-button" bindtap="goProfile">前往“我的”登录</button>
   </view>
 
   <block wx:else>
@@ -21,6 +28,7 @@
             <button class="ghost-button small-button" disabled="{{recognizeDisabled}}" bindtap="recognizeEvidence">识别</button>
           </view>
         </view>
+        <text class="section-description">先拍收费牌或入口，系统可自动提取关键信息。</text>
         <text class="body-hint">{{recognitionStatus}}，{{photoCount}} 张照片</text>
         <text class="body-copy">{{recognitionHint}}</text>
         <text wx:if="{{recognitionWarningText}}" class="warning-text">{{recognitionWarningText}}</text>
@@ -42,6 +50,7 @@
       <view class="step-number">02</view>
       <view class="step-content">
         <text class="section-title">基础信息</text>
+        <text class="section-description">名称、地址和入口提示会直接展示给其他车主。</text>
         <view class="field">
           <text class="field-label">停车场名称</text>
           <input class="field-input" value="{{form.name}}" data-key="name" bindinput="onInput" placeholder="例如：星河广场地下停车场" />
@@ -67,6 +76,7 @@
             <button class="ghost-button small-button" bindtap="useCurrentLocation">当前位置</button>
           </view>
         </view>
+        <text class="section-description">推荐使用地图选点，坐标会自动回填。</text>
         <view class="field">
           <text class="field-label">纬度</text>
           <input class="field-input" type="digit" value="{{form.latitude}}" data-key="latitude" bindinput="onInput" placeholder="31.23041" />
@@ -85,6 +95,7 @@
           <text class="section-title">收费规则</text>
           <text class="section-tag">{{chargeTypeLabel}}</text>
         </view>
+        <text class="section-description">选择最接近现场收费牌的规则，再填写对应价格。</text>
 
         <picker mode="selector" range="{{chargeTypeOptions}}" range-key="label" value="{{chargeTypeIndex}}" bindchange="onChargeTypeChange">
           <view class="pricing-type-card">
@@ -236,6 +247,7 @@
       <view class="step-number">05</view>
       <view class="step-content">
         <text class="section-title">现实因素</text>
+        <text class="section-description">补充车位和步行情况，让推荐更贴近真实体验。</text>
         <view class="field">
           <text class="field-label">车位情况</text>
           <picker mode="selector" range="{{availabilityOptions}}" range-key="label" value="{{availabilityIndex}}" bindchange="onAvailabilityChange">
@@ -249,6 +261,12 @@
       </view>
     </view>
 
-    <button class="primary-button save-button" bindtap="save">{{saveButtonText}}</button>
+    <view class="submit-dock">
+      <view class="submit-copy">
+        <text class="submit-title">确认信息准确</text>
+        <text class="submit-hint">发布后仍可在详情页维护</text>
+      </view>
+      <button class="primary-button save-button" loading="{{loading}}" bindtap="save">{{saveButtonText}}</button>
+    </view>
   </block>
 </view>

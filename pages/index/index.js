@@ -7,25 +7,20 @@ const {
 } = require("../../utils/recommendation");
 const {
   getLoggedInUser,
-  updateCurrentUserProfile,
   asyncGetAllParkingLots,
   asyncGetCurrentVehicle
 } = require("../../utils/storage");
-const api = require("../../utils/api");
 const { formatDuration } = require("../../utils/pricing");
 const { openParkingLocation } = require("../../utils/location");
-const { showErrorModal } = require("../../utils/error");
 
 const app = getApp();
-const LOGIN_KEY = "parkingLoginState";
-const CURRENT_USER_KEY = "parkingCurrentUser";
 const DESTINATION_KEY = "parkingDestination";
 const SEARCH_RADIUS_METERS = 3000;
 const DEFAULT_DURATION_MINUTES = 30;
 const MIN_DURATION_MINUTES = 1;
 const MAX_DURATION_DAYS = 7;
 const MAX_DURATION_MINUTES = (MAX_DURATION_DAYS * 24 * 60) + (23 * 60) + 59;
-const SHEET_COLLAPSED_HEIGHT = 396;
+const SHEET_COLLAPSED_HEIGHT = 330;
 const SHEET_MAP_GAP = 96;
 const MAP_EXPANDED_SHEET_HEIGHT = 220;
 const SHEET_ANIMATION_MS = 220;
@@ -37,6 +32,19 @@ const recommendationSortOptions = [
   { value: "comprehensive", label: "综合排序" },
   { value: "distance", label: "距离最近" },
   { value: "price", label: "低价优先" }
+];
+
+const parkingScopeOptions = [
+  { value: "all", label: "全部" },
+  { value: "offstreet", label: "室内车库" },
+  { value: "street", label: "路侧停车" }
+];
+
+const durationQuickOptions = [
+  { value: 30, label: "30分钟" },
+  { value: 60, label: "1小时" },
+  { value: 120, label: "2小时" },
+  { value: 240, label: "4小时" }
 ];
 
 function buildDurationOptions(maxValue, unit, pad) {
@@ -136,7 +144,11 @@ Page({
     accountStatusText: "游客模式",
     accountActionText: "登录",
     accountStatusClass: "is-guest",
+    userAvatarUrl: "",
+    userAvatarText: "我",
     recommendationSortOptions,
+    parkingScopeOptions,
+    durationQuickOptions,
     recommendationSortMode: "comprehensive",
     recommendationSortText: "综合排序",
     sortDropdownOpen: false,
@@ -149,15 +161,13 @@ Page({
     mapViewportHeightPx: 392,
     mapLocateBottomPx: SHEET_COLLAPSED_HEIGHT + 24,
     mapGestureEnabled: true,
-    durationDayOptions,
-    durationHourOptions,
-    durationMinuteOptions,
+    durationPickerRanges: [durationDayOptions, durationHourOptions, durationMinuteOptions],
     durationPickerValue: durationMinutesToPickerValue(DEFAULT_DURATION_MINUTES),
     durationMinutes: DEFAULT_DURATION_MINUTES,
     durationText: "30分钟",
     locating: false,
     locationStatusText: "等待定位",
-    showDurationPicker: false,
+    showDurationMenu: false,
     hasLocation: false,
     hasDestination: false,
     destination: null,
@@ -167,6 +177,7 @@ Page({
     currentVehicle: null,
     currentVehicleText: "未设置车辆",
     currentVehicleHint: "默认按停车场基础规则计费",
+    mapSearchKeyword: "",
     searchKeyword: "",
     destinationMatches: [],
     hasDestinationMatches: false,
@@ -189,7 +200,7 @@ Page({
 
   onLoad(query) {
     this.markerLotIds = {};
-    this._lots = [];
+    this._lots = null;
     this._bootstrapping = true;
     this.initSheetMetrics();
     this.restoreLogin();
@@ -203,6 +214,7 @@ Page({
 
   onShow() {
     this.initSheetMetrics();
+    this.restoreLogin();
     if (this._bootstrapping) return;
     this.refreshVehicle().then(() => this.refreshRecommendations());
   },
@@ -294,7 +306,7 @@ Page({
       mapExpanded: true,
       sheetExpanded: false,
       sheetAnimating: true,
-      showDurationPicker: false,
+      showDurationMenu: false,
       sheetHeightPx: sheetHeight,
       sheetTranslateY: 0,
       mapViewportHeightPx: this.getMapViewportHeight(sheetHeight),
@@ -390,15 +402,26 @@ Page({
   },
 
   restoreLogin() {
-    const state = wx.getStorageSync(LOGIN_KEY);
-    if (state && state.loggedAt && api.getToken()) {
+    const user = getLoggedInUser();
+    if (user) {
       this.setData({
         isLoggedIn: true,
-        accountStatusText: "已登录",
-        accountActionText: "刷新",
-        accountStatusClass: "is-authenticated"
+        accountStatusText: user.nickname || "我的",
+        accountActionText: "账户",
+        accountStatusClass: "is-authenticated",
+        userAvatarUrl: user.avatarUrl || "",
+        userAvatarText: user.avatarText || (user.nickname || "我").slice(0, 1)
       });
+      return;
     }
+    this.setData({
+      isLoggedIn: false,
+      accountStatusText: "我的",
+      accountActionText: "登录",
+      accountStatusClass: "is-guest",
+      userAvatarUrl: "",
+      userAvatarText: "我"
+    });
   },
 
   restoreDestination() {
@@ -406,80 +429,6 @@ Page({
     if (destination && destination.latitude && destination.longitude) {
       app.globalData.destination = destination;
       this.applyDestination(destination);
-    }
-  },
-
-  login() {
-    wx.login({
-      success: (res) => {
-        if (!res.code) {
-          wx.showToast({ title: "登录失败", icon: "none" });
-          return;
-        }
-        this.loginWithCode(res.code);
-      },
-      fail: () => {
-        wx.showToast({ title: "登录失败", icon: "none" });
-      }
-    });
-  },
-
-  async loginWithCode(code) {
-    this.setData({ loading: true });
-    try {
-      let userInfo = {};
-      if (wx.getUserProfile) {
-        try {
-          const profileRes = await new Promise((resolve, reject) => {
-            wx.getUserProfile({
-              desc: "用于展示停车场数据来源头像",
-              success: resolve,
-              fail: reject
-            });
-          });
-          if (profileRes.userInfo) {
-            userInfo = {
-              nickname: profileRes.userInfo.nickName,
-              avatarUrl: profileRes.userInfo.avatarUrl
-            };
-            updateCurrentUserProfile(profileRes.userInfo);
-          }
-        } catch (e) {
-          // User cancelled or not supported
-        }
-      }
-
-      const loginResult = await api.login(code, userInfo);
-      const token = loginResult.token;
-      wx.setStorageSync("auth_token", token);
-      app.globalData.authToken = token;
-
-      if (loginResult.user) {
-        const user = loginResult.user;
-        wx.setStorageSync(CURRENT_USER_KEY, {
-          id: user.openid || user.id || "",
-          nickname: user.nickname || "用户",
-          avatarUrl: user.avatar_url || user.avatarUrl || "",
-          avatarText: (user.nickname || "我").slice(0, 1),
-          avatarColor: "#166a5b",
-          createdAt: Date.now()
-        });
-      }
-
-      wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
-      this.setData({
-        isLoggedIn: true,
-        accountStatusText: "已登录",
-        accountActionText: "刷新",
-        accountStatusClass: "is-authenticated"
-      });
-      wx.showToast({ title: "已登录", icon: "success" });
-      this.refreshRecommendations();
-    } catch (error) {
-      console.error("Login failed:", error.message);
-      showErrorModal("登录失败", error, "登录失败，请检查网络或云托管配置。");
-    } finally {
-      this.setData({ loading: false });
     }
   },
 
@@ -570,7 +519,15 @@ Page({
       this.setData({ loading: false });
     }
 
-    const filteredLots = filterLotsByScope(lots, this.data.parkingScope);
+    this.applyRecommendationLots(lots, destination);
+  },
+
+  applyRecommendationLots(lots, destination) {
+    const keyword = String(this.data.mapSearchKeyword || "").trim().toLowerCase();
+    const scopedLots = filterLotsByScope(lots, this.data.parkingScope);
+    const filteredLots = keyword
+      ? scopedLots.filter((lot) => this.matchLotKeyword(lot, keyword))
+      : scopedLots;
     const baseRecommendations = recommendParkingLots({
       lots: filteredLots,
       durationMinutes: this.data.durationMinutes,
@@ -590,9 +547,19 @@ Page({
       ...visibleState,
       hasRecommendations: recommendations.length > 0,
       summary: buildRecommendationSummary(recommendations),
-      emptyText: "目的地 3 公里内没有匹配的停车场。可以清空筛选词，或先录入附近停车场。",
+      emptyText: keyword
+        ? "没有匹配的停车场，请换个关键词或清空搜索。"
+        : "目的地 3 公里内没有匹配的停车场。可以调整筛选，或先录入附近停车场。",
       ...mapState
     });
+  },
+
+  rebuildRecommendationsFromLoadedLots() {
+    const destination = app.globalData.destination;
+    if (!destination || !Array.isArray(this._lots)) {
+      return this.refreshRecommendations();
+    }
+    this.applyRecommendationLots(this._lots, destination);
   },
 
   matchLotKeyword(lot, keyword) {
@@ -633,7 +600,7 @@ Page({
       longitude: Number(destination.longitude),
       title: destination.name || "目的地",
       callout: {
-        content: "目的地", color: "#ffffff", bgColor: "#166a5b",
+        content: "目的地", color: "#ffffff", bgColor: "#176b5b",
         padding: 8, borderRadius: 4, display: "ALWAYS"
       }
     }];
@@ -650,7 +617,7 @@ Page({
         title: lot.name,
         callout: {
           content: `${lot.rank}. ${lot.name} ${lot.feeText}`,
-          color: "#18212f", bgColor: "#ffffff",
+          color: "#17201e", bgColor: "#ffffff",
           padding: 8, borderRadius: 4,
           display: index === 0 ? "ALWAYS" : "BYCLICK"
         }
@@ -670,25 +637,23 @@ Page({
 
   onSearchInput(event) {
     const value = event.detail.value;
-    this.setData({
-      searchKeyword: value,
-      destinationKeyword: value
+    this.setData({ mapSearchKeyword: value }, () => {
+      this.rebuildRecommendationsFromLoadedLots();
+      this.expandSheetFromSearch();
     });
-    this.refreshDestinationMatches(value);
-    this.expandSheetFromSearch();
   },
 
   clearSearch() {
     this.setData({
-      searchKeyword: "",
-      destinationKeyword: "",
-      destinationMatches: [],
-      hasDestinationMatches: false
-    });
+      mapSearchKeyword: ""
+    }, () => this.rebuildRecommendationsFromLoadedLots());
   },
 
   toggleSortDropdown() {
-    this.setData({ sortDropdownOpen: !this.data.sortDropdownOpen });
+    this.setData({
+      sortDropdownOpen: !this.data.sortDropdownOpen,
+      showDurationMenu: false
+    });
   },
 
   closeSortDropdown() {
@@ -902,17 +867,34 @@ Page({
     wx.chooseLocation(chooseOptions);
   },
 
-  onDurationPickerChange(event) {
-    const minutes = pickerValueToDurationMinutes(event.detail.value);
+  selectDurationPreset(event) {
+    const minutes = Number(event.currentTarget.dataset.minutes);
+    if (!Number.isFinite(minutes)) return;
     this.syncDuration(minutes);
-    this.refreshRecommendations();
+    this.setData({ showDurationMenu: false });
+    this.rebuildRecommendationsFromLoadedLots();
   },
 
-  toggleDurationPicker() {
-    if (!this.data.sheetExpanded) {
-      this.setSheetExpanded(true);
-    }
-    this.setData({ showDurationPicker: !this.data.showDurationPicker });
+  onDurationNativeChange(event) {
+    const minutes = pickerValueToDurationMinutes(event.detail.value);
+    this.syncDuration(minutes);
+    this.setData({ showDurationMenu: false });
+    this.rebuildRecommendationsFromLoadedLots();
+  },
+
+  toggleDurationMenu() {
+    this.setData({
+      showDurationMenu: !this.data.showDurationMenu,
+      sortDropdownOpen: false
+    });
+  },
+
+  setParkingScope(event) {
+    const scope = event.currentTarget.dataset.scope;
+    if (!scope || scope === this.data.parkingScope) return;
+    this.setData({ parkingScope: scope, sortDropdownOpen: false }, () => {
+      this.rebuildRecommendationsFromLoadedLots();
+    });
   },
 
   useCurrentLocationAsDestination() {
@@ -958,15 +940,19 @@ Page({
 
   goAdd() {
     if (!getLoggedInUser()) {
-      wx.showToast({ title: "请先登录再分享", icon: "none" });
+      wx.navigateTo({ url: "/pages/profile/profile" });
       return;
     }
     wx.navigateTo({ url: "/pages/add/add" });
   },
 
+  goProfile() {
+    wx.navigateTo({ url: "/pages/profile/profile" });
+  },
+
   goVehicles() {
     if (!getLoggedInUser()) {
-      wx.showToast({ title: "请先登录再管理车辆", icon: "none" });
+      wx.navigateTo({ url: "/pages/profile/profile" });
       return;
     }
     wx.navigateTo({ url: "/pages/vehicles/vehicles" });

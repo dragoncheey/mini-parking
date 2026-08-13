@@ -13,18 +13,23 @@
   ></map>
 
   <view wx:if="{{!mapExpanded}}" class="map-top-actions">
-    <view class="map-account-chip {{accountStatusClass}}" bindtap="login">
-      <text class="account-dot"></text>
-      <text class="account-status">{{accountStatusText}}</text>
-      <text class="account-action">{{accountActionText}}</text>
+    <view class="map-account-chip {{accountStatusClass}}" bindtap="goProfile">
+      <view class="account-avatar">
+        <image wx:if="{{userAvatarUrl}}" class="account-avatar-image" src="{{userAvatarUrl}}" mode="aspectFill" />
+        <text wx:else>{{userAvatarText}}</text>
+      </view>
+      <view class="account-copy">
+        <text class="account-status">{{accountStatusText}}</text>
+        <text class="account-action">{{accountActionText}}</text>
+      </view>
+      <text class="account-chevron">›</text>
     </view>
-    <button
-      class="map-add-action"
-      bindtap="goAdd"
-      aria-label="分享停车场"
-    >
-      <text class="map-add-plus">+</text>
-    </button>
+  </view>
+
+  <view wx:if="{{!mapExpanded}}" class="map-add-float">
+    <view class="map-add-action" bindtap="goAdd" hover-class="map-add-action-hover" aria-role="button" aria-label="分享停车场">
+      <text class="map-add-plus">＋</text>
+    </view>
   </view>
 
   <view wx:if="{{mapExpanded}}" class="map-search-bar">
@@ -33,24 +38,17 @@
       <text class="search-prefix">⌕</text>
       <input
         class="map-search-input"
-        value="{{searchKeyword}}"
-        bindfocus="expandSheetFromSearch"
+        value="{{mapSearchKeyword}}"
         bindinput="onSearchInput"
         confirm-type="search"
-        placeholder="搜索目的地"
+        placeholder="搜索停车场"
       />
-      <view wx:if="{{searchKeyword}}" class="map-more-button" bindtap="clearSearch">×</view>
+      <view wx:if="{{mapSearchKeyword}}" class="map-more-button" bindtap="clearSearch">×</view>
     </view>
   </view>
 
   <view class="map-action-stack" style="bottom: {{mapLocateBottomPx}}px;">
-    <view
-      wx:if="{{!mapExpanded}}"
-      class="map-round-button expand-map-control"
-      bindtap="enterMapMode"
-      aria-role="button"
-      aria-label="放大地图"
-    >
+    <view wx:if="{{!mapExpanded}}" class="map-round-button expand-map-control" bindtap="enterMapMode" aria-role="button" aria-label="放大地图">
       <view class="map-mini-icon expand-mini-icon">
         <view class="mini-corner mini-corner-tl"></view>
         <view class="mini-corner mini-corner-tr"></view>
@@ -58,13 +56,7 @@
         <view class="mini-corner mini-corner-br"></view>
       </view>
     </view>
-    <view
-      class="map-round-button locate-control"
-      bindtap="useCurrentLocationAsDestination"
-      hover-class="locate-control-hover"
-      aria-role="button"
-      aria-label="定位到当前位置"
-    >
+    <view class="map-round-button locate-control" bindtap="useCurrentLocationAsDestination" hover-class="locate-control-hover" aria-role="button" aria-label="定位到当前位置">
       <view class="map-mini-icon locate-mini-icon">
         <view class="mini-axis mini-axis-x"></view>
         <view class="mini-axis mini-axis-y"></view>
@@ -94,169 +86,80 @@
         <view wx:if="{{!mapExpanded}}" class="workbench-summary sheet-summary-row">
           <view class="sheet-summary-main">
             <view class="sheet-title-line">
-              <text class="sheet-title">{{destinationName}}</text>
-              <text class="sheet-caret">{{sheetExpanded ? '下拉收起' : '上拉查看'}}</text>
+              <text class="sheet-eyebrow">目的地</text>
+              <text class="sheet-caret">{{sheetExpanded ? '收起地图卡片' : '展开全部推荐'}}</text>
             </view>
-            <text class="sheet-summary">{{summary}}</text>
+            <text class="sheet-title">{{destinationName}}</text>
           </view>
           <view class="sheet-count-box">
             <text class="sheet-count-number">{{recommendations.length}}</text>
-            <text class="sheet-count-label">个停车场</text>
+            <text class="sheet-count-label">个推荐</text>
           </view>
         </view>
-        <view wx:if="{{!sheetExpanded && !mapExpanded}}" class="workbench-config-row quick-summary-grid">
-          <view class="quick-summary-item" bindtap="chooseDestination">
-            <text class="quick-label">目的地</text>
-            <text class="quick-value">{{destinationName}}</text>
-          </view>
-          <view class="quick-summary-item" bindtap="toggleDurationPicker">
-            <text class="quick-label">时长</text>
-            <text class="quick-value">{{durationText}}</text>
-          </view>
-          <view class="quick-summary-item" bindtap="goVehicles">
-            <text class="quick-label">车辆</text>
-            <text class="quick-value">{{currentVehicleText}}</text>
-          </view>
-        </view>
-        <block wx:if="{{!sheetExpanded && !mapExpanded && hasRecommendations}}">
-          <view
-            wx:for="{{recommendations}}"
-            wx:key="id"
-            wx:if="{{index === 0}}"
-            class="first-recommendation-preview"
-            data-id="{{item.id}}"
-            catchtap="goDetail"
-          >
-            <view class="preview-rank">{{item.rank}}</view>
-            <view class="preview-main">
-              <text class="preview-name">{{item.name}}</text>
-              <text class="preview-meta">{{item.distanceText}} · 步行约 {{item.walkingMinutes}} 分钟</text>
-            </view>
-            <view class="preview-price">
-              <text class="preview-fee">{{item.feeText}}</text>
-              <text class="preview-note">{{item.durationText}}</text>
-            </view>
-          </view>
-        </block>
         <view wx:if="{{mapExpanded && !sheetExpanded}}" class="map-mode-summary">
-          <text class="map-mode-title">{{destinationName}}</text>
-          <text class="map-mode-meta">{{recommendations.length}} 个停车场 · {{durationText}}</text>
+          <view>
+            <text class="map-mode-title">{{destinationName}}</text>
+            <text class="map-mode-meta">{{recommendations.length}} 个停车场 · {{durationText}}</text>
+          </view>
+          <text class="map-mode-expand">查看列表</text>
         </view>
       </view>
-    </view>
 
-    <scroll-view
-      class="sheet-scroll"
-      scroll-y="{{sheetExpanded}}"
-      lower-threshold="96"
-      bindscrolltolower="loadMoreRecommendations"
-    >
-      <view class="sheet-content">
-        <view wx:if="{{sheetExpanded}}" class="expanded-controls">
-          <view class="expanded-control-row">
-            <view class="config-control primary-control" bindtap="chooseDestination">
+      <block wx:if="{{!mapExpanded}}">
+        <view class="workbench-config-row quick-summary-grid">
+          <view class="quick-summary-item" bindtap="chooseDestination">
+            <text class="quick-icon pin-icon">⌖</text>
+            <view class="quick-copy">
               <text class="quick-label">目的地</text>
               <text class="quick-value">{{destinationName}}</text>
             </view>
-            <view class="config-control primary-control" bindtap="toggleDurationPicker">
-              <text class="quick-label">时长</text>
+          </view>
+          <view class="quick-summary-item {{showDurationMenu ? 'is-active' : ''}}" bindtap="toggleDurationMenu">
+            <text class="quick-icon">◷</text>
+            <view class="quick-copy">
+              <text class="quick-label">停车时长</text>
               <text class="quick-value">{{durationText}}</text>
             </view>
-            <view class="config-control" bindtap="goVehicles">
-              <text class="quick-label">车辆</text>
+          </view>
+          <view class="quick-summary-item" bindtap="goVehicles">
+            <text class="quick-icon car-icon">▰</text>
+            <view class="quick-copy">
+              <text class="quick-label">当前车辆</text>
               <text class="quick-value">{{currentVehicleText}}</text>
             </view>
           </view>
-
-          <view wx:if="{{showDurationPicker}}" class="duration-panel">
-            <view class="control-header">
-              <text class="section-title">预计停车</text>
-              <text class="duration-value">{{durationText}}</text>
-            </view>
-            <text class="duration-hint">默认 30 分钟，1 分钟一档</text>
-            <view class="duration-picker-shell">
-              <picker-view
-                class="duration-picker"
-                indicator-class="duration-picker-indicator"
-                indicator-style="height: 72rpx;"
-                mask-class="duration-picker-mask"
-                value="{{durationPickerValue}}"
-                bindchange="onDurationPickerChange"
-              >
-                <picker-view-column>
-                  <view
-                    wx:for="{{durationDayOptions}}"
-                    wx:key="value"
-                    class="duration-wheel-item"
-                  >
-                    <text class="duration-wheel-number">{{item.label}}</text>
-                    <text class="duration-wheel-unit">{{item.unit}}</text>
-                  </view>
-                </picker-view-column>
-                <picker-view-column>
-                  <view
-                    wx:for="{{durationHourOptions}}"
-                    wx:key="value"
-                    class="duration-wheel-item"
-                  >
-                    <text class="duration-wheel-number">{{item.label}}</text>
-                    <text class="duration-wheel-unit">{{item.unit}}</text>
-                  </view>
-                </picker-view-column>
-                <picker-view-column>
-                  <view
-                    wx:for="{{durationMinuteOptions}}"
-                    wx:key="value"
-                    class="duration-wheel-item"
-                  >
-                    <text class="duration-wheel-number">{{item.label}}</text>
-                    <text class="duration-wheel-unit">{{item.unit}}</text>
-                  </view>
-                </picker-view-column>
-              </picker-view>
-            </view>
-          </view>
-
-          <view class="custom-panel">
-            <view class="search-row">
-              <input
-                class="search-input"
-                value="{{searchKeyword}}"
-                bindinput="onDestinationInput"
-                confirm-type="search"
-                placeholder="搜索目的地"
-              />
-              <button class="secondary-button choose-button" bindtap="searchDestinationCandidates">匹配</button>
-            </view>
-
-            <view wx:if="{{hasDestinationMatches}}" class="match-panel">
-              <text class="match-title">目的地候选</text>
-              <view
-                wx:for="{{destinationMatches}}"
-                wx:key="id"
-                class="match-row"
-                data-id="{{item.id}}"
-                bindtap="selectDestinationMatch"
-              >
-                <view class="match-info">
-                  <text class="match-name">{{item.name}}</text>
-                  <text class="match-address">{{item.address}}</text>
-                </view>
-                <text class="match-action">设为目的地</text>
-              </view>
-            </view>
-
-          </view>
         </view>
 
-        <view class="list-header">
-          <view class="recommendation-sort">
+        <view wx:if="{{showDurationMenu}}" class="duration-quick-panel">
+          <text class="duration-menu-title">预计停多久？</text>
+          <view class="duration-option-row">
             <view
-              class="recommendation-sort-trigger {{sortDropdownOpen ? 'is-open' : ''}}"
-              bindtap="toggleSortDropdown"
-              aria-role="button"
-              aria-label="切换排序"
-            >
+              wx:for="{{durationQuickOptions}}"
+              wx:key="value"
+              class="duration-option {{item.value === durationMinutes ? 'is-selected' : ''}}"
+              data-minutes="{{item.value}}"
+              bindtap="selectDurationPreset"
+            >{{item.label}}</view>
+          </view>
+          <picker mode="multiSelector" range="{{durationPickerRanges}}" range-key="label" value="{{durationPickerValue}}" bindchange="onDurationNativeChange">
+            <view class="duration-custom-action">精确设置天、小时和分钟 <text>›</text></view>
+          </picker>
+        </view>
+
+        <view class="filter-toolbar">
+          <scroll-view class="scope-scroll" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+            <view class="scope-row">
+              <view
+                wx:for="{{parkingScopeOptions}}"
+                wx:key="value"
+                class="scope-chip {{item.value === parkingScope ? 'is-active' : ''}}"
+                data-scope="{{item.value}}"
+                bindtap="setParkingScope"
+              >{{item.label}}</view>
+            </view>
+          </scroll-view>
+          <view class="recommendation-sort">
+            <view class="sort-compact-trigger {{sortDropdownOpen ? 'is-open' : ''}}" bindtap="toggleSortDropdown">
               <text>{{recommendationSortText}}</text>
               <text class="sort-chevron"></text>
             </view>
@@ -268,50 +171,65 @@
                 data-mode="{{item.value}}"
                 bindtap="setRecommendationSortMode"
               >
-                <text class="sort-check">{{item.value === recommendationSortMode ? '✓' : ''}}</text>
                 <text>{{item.label}}</text>
+                <text class="sort-check">{{item.value === recommendationSortMode ? '✓' : ''}}</text>
               </view>
             </view>
           </view>
-          <text class="muted">{{recommendations.length}} 个停车场</text>
+        </view>
+
+        <block wx:if="{{!sheetExpanded && hasRecommendations && !showDurationMenu}}">
+          <view wx:for="{{recommendations}}" wx:key="id" wx:if="{{index === 0}}" class="first-recommendation-preview" data-id="{{item.id}}" bindtap="goDetail">
+            <view class="preview-rank">首选</view>
+            <view class="preview-main">
+              <text class="preview-name">{{item.name}}</text>
+              <text class="preview-meta">{{item.distanceText}} · 步行 {{item.walkingMinutes}} 分钟</text>
+            </view>
+            <view class="preview-price">
+              <text class="preview-fee">{{item.feeText}}</text>
+              <text class="preview-note">查看详情 ›</text>
+            </view>
+          </view>
+        </block>
+      </block>
+    </view>
+
+    <scroll-view wx:if="{{sheetExpanded || !mapExpanded}}" class="sheet-scroll" scroll-y="{{sheetExpanded}}" lower-threshold="96" bindscrolltolower="loadMoreRecommendations">
+      <view class="sheet-content">
+        <view wx:if="{{sheetExpanded}}" class="list-header">
+          <view>
+            <text class="list-kicker">为你筛选</text>
+            <text class="list-title">附近停车场</text>
+          </view>
+          <text class="list-count">{{recommendations.length}} 个结果</text>
         </view>
 
         <block wx:if="{{hasRecommendations}}">
-          <view
-            wx:for="{{visibleRecommendations}}"
-            wx:key="id"
-            class="lot-card {{item.bestClass}}"
-          >
+          <view wx:for="{{visibleRecommendations}}" wx:key="id" class="lot-card {{item.bestClass}}">
             <view class="lot-main">
               <view class="rank-badge">{{item.rank}}</view>
               <view class="lot-info">
                 <view class="lot-title-line">
                   <text class="lot-name">{{item.name}}</text>
-                  <text class="type-label {{item.parkingTypeClass}}">{{item.parkingTypeText}}</text>
                   <text wx:if="{{item.isBest}}" class="best-label">推荐</text>
                 </view>
                 <text class="lot-address">{{item.address}}</text>
               </view>
               <view class="price-box">
                 <text class="price">{{item.feeText}}</text>
-                <text class="price-note">{{item.durationText}}</text>
+                <text class="price-note">预计费用</text>
               </view>
             </view>
 
             <view class="metric-row">
-              <text>距目的地 {{item.distanceText}}</text>
-              <text>步行约 {{item.walkingMinutes}} 分钟</text>
+              <text class="metric-item">{{item.parkingTypeText}}</text>
+              <text class="metric-item">距目的地 {{item.distanceText}}</text>
+              <text class="metric-item">步行 {{item.walkingMinutes}} 分钟</text>
             </view>
 
             <view class="tag-row">
-              <text
-                wx:for="{{item.tags}}"
-                wx:key="*this"
-                class="pill"
-              >{{item}}</text>
+              <text wx:for="{{item.tags}}" wx:key="*this" class="pill">{{item}}</text>
             </view>
-
-            <text class="reason">{{item.reason}}</text>
 
             <view class="source-line">
               <view class="source-avatar" style="background: {{item.owner.avatarColor}}">
@@ -320,22 +238,17 @@
               </view>
               <text class="source-name">{{item.owner.nickname}}</text>
               <text class="source-confidence">可信度 {{item.confidence}}</text>
-              <text wx:if="{{item.voteStats.total}}" class="source-confidence">赞 {{item.voteStats.up}} / 踩 {{item.voteStats.down}}</text>
             </view>
 
             <view class="action-row">
-              <button class="primary-button action-button" data-id="{{item.id}}" bindtap="openNavigation">导航</button>
-              <button class="ghost-button action-button" data-id="{{item.id}}" bindtap="goDetail">详情</button>
+              <button class="ghost-button action-button" data-id="{{item.id}}" bindtap="goDetail">查看详情</button>
+              <button class="primary-button action-button" data-id="{{item.id}}" bindtap="openNavigation">去这里</button>
             </view>
           </view>
-          <view class="load-more-line {{hasMoreRecommendations ? '' : 'is-end'}}">
-            {{hasMoreRecommendations ? '继续下拉加载更多' : '我是有底线的'}}
-          </view>
+          <view class="load-more-line {{hasMoreRecommendations ? '' : 'is-end'}}">{{hasMoreRecommendations ? '继续下拉加载更多' : '已经看完全部推荐'}}</view>
         </block>
 
-        <view wx:else class="empty sheet-empty">
-          {{emptyText}}
-        </view>
+        <view wx:else class="empty sheet-empty">{{emptyText}}</view>
       </view>
     </scroll-view>
   </view>

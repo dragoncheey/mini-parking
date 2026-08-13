@@ -1,31 +1,43 @@
 <view class="page vehicles-page">
   <view class="vehicles-header">
     <view>
-      <text class="vehicles-kicker">车辆配置</text>
+      <text class="vehicles-kicker">车辆偏好</text>
       <text class="vehicles-title">{{pageTitle}}</text>
+      <text class="vehicles-subtitle">推荐费用会自动匹配当前车辆类型</text>
     </view>
-    <button wx:if="{{!loginRequired}}" class="secondary-button add-entry-button" bindtap="openAddPanel">添加</button>
+    <view wx:if="{{!loginRequired}}" class="vehicle-count-pill">{{vehicles.length}} 辆</view>
   </view>
 
   <view wx:if="{{loginRequired}}" class="login-panel">
-    <text class="login-title">登录后管理车辆</text>
-    <text class="login-copy">车辆只保存在当前用户下，用于区分新能源和燃油车计费。</text>
-    <button class="primary-button login-button" bindtap="login">登录</button>
+    <view class="login-illustration">
+      <text class="login-car">车</text>
+    </view>
+    <text class="login-title">登录后管理爱车</text>
+    <text class="login-copy">车辆跟随账号云端保存，用于识别燃油车与新能源专属停车优惠。</text>
+    <button class="primary-button login-button" bindtap="goProfile">前往“我的”登录</button>
   </view>
 
   <block wx:else>
     <view class="current-card">
       <view class="current-card-top">
         <view>
-          <text class="current-label">当前车辆</text>
+          <text class="current-label">正在使用</text>
           <text class="current-value">{{currentVehicleLabel}}</text>
         </view>
-        <button class="ghost-button add-entry-button" bindtap="openAddPanel">更换</button>
+        <view class="current-check">✓</view>
       </view>
-      <text class="current-copy">推荐价格会按当前车型匹配基础规则或新能源优惠。</text>
+      <text class="current-copy">首页推荐与停车费预估都按这辆车计算。</text>
     </view>
 
     <view class="list-section">
+      <view class="list-heading">
+        <view>
+          <text class="list-kicker">车辆列表</text>
+          <text class="list-title">点按卡片可编辑车牌</text>
+        </view>
+        <button class="secondary-button add-entry-button" bindtap="openAddPanel">＋ 添加车辆</button>
+      </view>
+
       <view wx:if="{{vehicles.length}}">
         <view
           wx:for="{{vehicles}}"
@@ -36,16 +48,18 @@
         >
           <view class="vehicle-card-main">
             <view class="vehicle-card-head">
-              <text class="plate-number">{{item.plateDisplay}}</text>
-              <text wx:if="{{item.id === currentVehicleId}}" class="current-badge">当前</text>
-            </view>
-            <view class="vehicle-card-body">
-              <text class="energy-badge">{{item.vehicleTypeLabel}}</text>
+              <view>
+                <text class="plate-number">{{item.plateDisplay}}</text>
+                <text class="vehicle-type-text">{{item.vehicleTypeLabel}}</text>
+              </view>
+              <text wx:if="{{item.id === currentVehicleId}}" class="current-badge">当前车辆</text>
+              <text wx:else class="edit-hint">编辑 ›</text>
             </view>
           </view>
           <view class="vehicle-actions">
-            <button class="secondary-button small-button" data-id="{{item.id}}" catchtap="useVehicle">设当前</button>
-            <button class="ghost-button small-button" data-id="{{item.id}}" catchtap="removeVehicle">删除</button>
+            <button wx:if="{{item.id !== currentVehicleId}}" class="secondary-button small-button" data-id="{{item.id}}" catchtap="useVehicle">设为当前</button>
+            <view wx:else class="current-action-note">推荐正在使用</view>
+            <button class="ghost-button small-button delete-button" data-id="{{item.id}}" catchtap="removeVehicle">删除</button>
           </view>
         </view>
       </view>
@@ -55,7 +69,13 @@
 
   <view wx:if="{{showAddPanel}}" class="plate-overlay" bindtap="closeAddPanel">
     <view class="plate-sheet" catchtap="stopPanelTap">
-      <text class="sheet-title">{{panelTitle}}</text>
+      <view class="plate-sheet-header">
+        <view>
+          <text class="sheet-kicker">车辆信息</text>
+          <text class="sheet-title">{{panelTitle}}</text>
+        </view>
+        <view class="sheet-close" bindtap="closeAddPanel">×</view>
+      </view>
 
       <view class="plate-preview-card">
         <view class="plate-slots">
@@ -69,66 +89,30 @@
             <text>{{item.value}}</text>
           </view>
         </view>
-        <view class="plate-benefit-row">
-          <text class="benefit-icon">✓</text>
-          <text>绑定车牌号可识别车型专属优惠</text>
-        </view>
-        <view class="auto-type-row">
-          <text>已识别</text>
-          <text class="auto-type-value">{{form.vehicleTypeLabel}}</text>
+        <view class="plate-meta-row">
+          <view class="plate-benefit-row">
+            <text class="benefit-icon">✓</text>
+            <text>自动识别车型优惠</text>
+          </view>
+          <view class="auto-type-row">
+            <text>已识别</text>
+            <text class="auto-type-value">{{form.vehicleTypeLabel}}</text>
+          </view>
         </view>
       </view>
 
       <view class="keyboard-panel">
         <block wx:if="{{form.keyboardMode === 'province'}}">
-          <view
-            wx:for="{{provinceKeys}}"
-            wx:for-item="row"
-            wx:key="*this"
-            class="keyboard-row"
-          >
-            <view
-              wx:for="{{row}}"
-              wx:for-item="key"
-              wx:key="*this"
-              class="keyboard-key"
-              data-key="{{key}}"
-              bindtap="onPlateKeyTap"
-            >{{key}}</view>
+          <view wx:for="{{provinceKeys}}" wx:for-item="row" wx:key="*this" class="keyboard-row">
+            <view wx:for="{{row}}" wx:for-item="key" wx:key="*this" class="keyboard-key" data-key="{{key}}" bindtap="onPlateKeyTap">{{key}}</view>
           </view>
         </block>
         <block wx:else>
-          <view
-            wx:if="{{form.activePlateIndex === 1}}"
-            wx:for="{{firstLetterKeys}}"
-            wx:for-item="row"
-            wx:key="*this"
-            class="keyboard-row"
-          >
-            <view
-              wx:for="{{row}}"
-              wx:for-item="key"
-              wx:key="*this"
-              class="keyboard-key"
-              data-key="{{key}}"
-              bindtap="onPlateKeyTap"
-            >{{key}}</view>
+          <view wx:if="{{form.activePlateIndex === 1}}" wx:for="{{firstLetterKeys}}" wx:for-item="row" wx:key="*this" class="keyboard-row">
+            <view wx:for="{{row}}" wx:for-item="key" wx:key="*this" class="keyboard-key" data-key="{{key}}" bindtap="onPlateKeyTap">{{key}}</view>
           </view>
-          <view
-            wx:if="{{form.activePlateIndex !== 1}}"
-            wx:for="{{letterKeys}}"
-            wx:for-item="row"
-            wx:key="*this"
-            class="keyboard-row"
-          >
-            <view
-              wx:for="{{row}}"
-              wx:for-item="key"
-              wx:key="*this"
-              class="keyboard-key {{key === '删除' ? 'is-delete' : ''}}"
-              data-key="{{key}}"
-              bindtap="onPlateKeyTap"
-            >{{key}}</view>
+          <view wx:if="{{form.activePlateIndex !== 1}}" wx:for="{{letterKeys}}" wx:for-item="row" wx:key="*this" class="keyboard-row">
+            <view wx:for="{{row}}" wx:for-item="key" wx:key="*this" class="keyboard-key {{key === '删除' ? 'is-delete' : ''}}" data-key="{{key}}" bindtap="onPlateKeyTap">{{key}}</view>
           </view>
           <view wx:if="{{form.activePlateIndex === 1}}" class="keyboard-row">
             <view class="keyboard-key is-delete" data-key="删除" bindtap="onPlateKeyTap">删除</view>

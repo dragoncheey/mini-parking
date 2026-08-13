@@ -138,17 +138,26 @@ function testUiLayoutStructure() {
   const detailWxml = readProjectFile("pages/detail/detail.wxml");
   const vehiclesWxml = readProjectFile("pages/vehicles/vehicles.wxml");
   const addWxml = readProjectFile("pages/add/add.wxml");
+  const profileWxml = readProjectFile("pages/profile/profile.wxml");
+  const appJson = JSON.parse(readProjectFile("app.json"));
 
   assert.match(indexWxml, /class="workbench-summary/);
   assert.match(indexWxml, /class="workbench-config-row/);
   assert.match(indexWxml, /class="first-recommendation-preview/);
   assert.match(indexWxml, /class="map-top-actions/);
   assert.match(indexWxml, /class="map-add-action/);
-  assert.match(indexWxml, /class="recommendation-sort-trigger/);
+  assert.match(indexWxml, /<view[\s\S]*class="map-add-action/);
+  assert.doesNotMatch(indexWxml, /<button[\s\S]*class="map-add-action/);
+  assert.match(indexWxml, /class="sort-compact-trigger/);
   assert.match(indexWxml, /class="recommendation-sort-menu/);
+  assert.match(indexWxml, /class="duration-quick-panel/);
+  assert.match(indexWxml, /bindtap="selectDurationPreset"/);
+  assert.match(indexWxml, /mode="multiSelector"/);
+  assert.match(indexWxml, /class="scope-chip/);
+  assert.match(indexWxml, /class="map-account-chip[^\n]+bindtap="goProfile"/);
   assert.match(indexWxml, /bindscrolltolower="loadMoreRecommendations"/);
   assert.match(indexWxml, /wx:for="\{\{visibleRecommendations\}\}"/);
-  assert.match(indexWxml, /我是有底线的/);
+  assert.match(indexWxml, /已经看完全部推荐/);
   assert.match(indexWxml, /class="map-mini-icon expand-mini-icon/);
   assert.match(indexWxml, /class="map-mini-icon locate-mini-icon/);
   assert.doesNotMatch(indexWxml, /余位最多/);
@@ -163,9 +172,19 @@ function testUiLayoutStructure() {
 
   assert.match(vehiclesWxml, /class="vehicles-header/);
   assert.match(vehiclesWxml, /class="vehicle-card-main/);
+  assert.match(vehiclesWxml, /前往“我的”登录/);
+  assert.doesNotMatch(vehiclesWxml, /bindtap="login"/);
 
   assert.match(addWxml, /class="form-step/);
   assert.match(addWxml, /class="step-number/);
+  assert.match(addWxml, /class="submit-dock/);
+  assert.match(addWxml, /前往“我的”登录/);
+  assert.doesNotMatch(addWxml, /bindtap="loginAndContinue"/);
+
+  assert.ok(appJson.pages.includes("pages/profile/profile"));
+  assert.match(profileWxml, /class="profile-hero/);
+  assert.match(profileWxml, /class="account-overview/);
+  assert.match(profileWxml, /bindtap="logout"/);
 }
 
 function testRecognitionParsing() {

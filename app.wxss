@@ -1,7 +1,7 @@
 page {
   min-height: 100%;
-  background: #f4f6f8;
-  color: #18212f;
+  background: #f6f7f4;
+  color: #17201e;
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   letter-spacing: 0;
   overflow-x: hidden;
@@ -30,11 +30,11 @@ button::after {
 
 .page {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: 28rpx;
 }
 
 .muted {
-  color: #657286;
+  color: #74807c;
 }
 
 .strong {
@@ -47,8 +47,8 @@ button::after {
   height: 40rpx;
   padding: 0 16rpx;
   border-radius: 999rpx;
-  color: #34506b;
-  background: #eaf2f7;
+  color: #49615b;
+  background: #edf2ef;
   font-size: 22rpx;
   white-space: nowrap;
 }
@@ -61,10 +61,10 @@ button::after {
   align-items: center;
   justify-content: center;
   max-width: 100%;
-  min-height: 72rpx;
+  min-height: 80rpx;
   padding: 0 24rpx;
   font-size: 28rpx;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;
@@ -72,17 +72,18 @@ button::after {
 
 .primary-button {
   color: #ffffff;
-  background: #166a5b;
+  background: #176b5b;
+  box-shadow: 0 10rpx 24rpx rgba(23, 107, 91, 0.18);
 }
 
 .secondary-button {
-  color: #143d35;
-  background: #d9eee9;
+  color: #145347;
+  background: #dff1eb;
 }
 
 .ghost-button {
-  color: #34506b;
-  background: #eef3f6;
+  color: #42524e;
+  background: #edf0ed;
 }
 
 .danger-button {
@@ -93,10 +94,10 @@ button::after {
 .empty {
   margin-top: 32rpx;
   padding: 40rpx 28rpx;
-  border: 1rpx solid #dce4ec;
-  border-radius: 8rpx;
+  border: 1rpx solid #e2e7e3;
+  border-radius: 24rpx;
   background: #ffffff;
-  color: #657286;
+  color: #74807c;
   font-size: 28rpx;
   line-height: 1.6;
 }

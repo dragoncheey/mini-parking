@@ -1,13 +1,11 @@
 const {
   getLoggedInUser,
-  updateCurrentUserProfile,
   asyncGetParkingLotDetail,
   asyncSaveUserParkingLot,
   asyncUpdateUserParkingLot
 } = require("../../utils/storage");
 const api = require("../../utils/api");
 const { requestParkingRecognition } = require("../../utils/api");
-const { showErrorModal } = require("../../utils/error");
 
 const LOGIN_KEY = "parkingLoginState";
 const CURRENT_USER_KEY = "parkingCurrentUser";
@@ -222,6 +220,12 @@ Page({
     this.bootstrap(editId);
   },
 
+  onShow() {
+    if (this.data.loginRequired && getLoggedInUser()) {
+      this.bootstrap(this.pendingEditId || this.data.editId);
+    }
+  },
+
   async bootstrap(editId) {
     const user = getLoggedInUser();
     if (!user) {
@@ -269,70 +273,8 @@ Page({
     });
   },
 
-  loginAndContinue() {
-    wx.login({
-      success: (res) => {
-        if (!res.code) {
-          wx.showToast({ title: "登录失败", icon: "none" });
-          return;
-        }
-        this.loginWithCodeAndContinue(res.code);
-      },
-      fail: () => {
-        wx.showToast({ title: "登录失败", icon: "none" });
-      }
-    });
-  },
-
-  async loginWithCodeAndContinue(code) {
-    this.setData({ loading: true });
-    try {
-      let userInfo = {};
-      if (wx.getUserProfile) {
-        try {
-          const profileRes = await new Promise((resolve, reject) => {
-            wx.getUserProfile({
-              desc: "用于展示停车场数据来源头像",
-              success: resolve,
-              fail: reject
-            });
-          });
-          if (profileRes.userInfo) {
-            userInfo = {
-              nickname: profileRes.userInfo.nickName,
-              avatarUrl: profileRes.userInfo.avatarUrl
-            };
-            updateCurrentUserProfile(profileRes.userInfo);
-          }
-        } catch (e) {
-          // User cancelled
-        }
-      }
-
-      const loginResult = await api.login(code, userInfo);
-      wx.setStorageSync("auth_token", loginResult.token);
-
-      if (loginResult.user) {
-        const user = loginResult.user;
-        wx.setStorageSync(CURRENT_USER_KEY, {
-          id: user.openid || user.id || "",
-          nickname: user.nickname || "用户",
-          avatarUrl: user.avatar_url || user.avatarUrl || "",
-          avatarText: (user.nickname || "我").slice(0, 1),
-          avatarColor: "#166a5b",
-          createdAt: Date.now()
-        });
-      }
-
-      wx.setStorageSync(LOGIN_KEY, { loggedAt: Date.now() });
-      wx.showToast({ title: "已登录", icon: "success" });
-      this.bootstrap(this.pendingEditId || this.data.editId);
-    } catch (error) {
-      console.error("Login failed:", error.message);
-      showErrorModal("登录失败", error, "登录失败，请检查网络或云托管配置。");
-    } finally {
-      this.setData({ loading: false });
-    }
+  goProfile() {
+    wx.navigateTo({ url: "/pages/profile/profile" });
   },
 
   async loadEditableLot(editId) {
