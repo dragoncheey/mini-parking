@@ -84,7 +84,7 @@ MODEL_API_MOCK=0
 Production API traffic is served from `https://parking.kuaidianfanfan.com`.
 
 - Runtime: Docker Compose on the self-owned server
-- HTTPS/reverse proxy: Caddy
+- HTTPS/reverse proxy: an independently managed Caddy service on the server
 - Database and evidence photos: hosted Supabase
 - Deployment runbook: `docs/self-hosted-deployment.md`
 

@@ -4,7 +4,8 @@
 
 - API domain: `parking.kuaidianfanfan.com`
 - Server: `49.64.86.64`
-- Runtime: Docker Compose with Caddy and Node.js
+- Runtime: Docker Compose with Node.js
+- HTTPS/reverse proxy: an independently managed Caddy service on the server
 - Database and object storage: hosted Supabase
 
 ## Before deployment
@@ -13,7 +14,8 @@
 2. Add an SSH key and verify key-based login.
 3. Restrict SSH access where practical.
 4. Point DNS `A` record `parking.kuaidianfanfan.com` to `49.64.86.64`.
-5. Confirm ICP and WeChat mini-program domain requirements are satisfied for production use.
+5. Confirm the independent Caddy service can proxy `parking.kuaidianfanfan.com` to `127.0.0.1:8787`.
+6. Confirm ICP and WeChat mini-program domain requirements are satisfied for production use.
 
 ## Server files
 
@@ -40,6 +42,8 @@ docker compose --env-file .env.server up -d --build
 docker compose ps
 ```
 
+The project Compose file only starts the API and binds it to `127.0.0.1:8787`. Keep TLS termination, certificates, and public ports `80`/`443` in the server's independent Caddy deployment.
+
 ## Validate Compose configuration locally
 
 When validating with the committed example file instead of real secrets, run:
@@ -53,16 +57,17 @@ SERVER_ENV_FILE=.env.server.example docker compose --env-file .env.server.exampl
 ```bash
 curl -i http://parking.kuaidianfanfan.com/health
 curl -i https://parking.kuaidianfanfan.com/health
+curl -i http://127.0.0.1:8787/health
 docker compose logs --tail=100 api
-docker compose logs --tail=100 caddy
 ```
 
 Expected:
 
-- HTTP redirects or serves through Caddy.
+- The local API health check returns JSON with `"ok":true`.
+- The independent Caddy service redirects or serves HTTP as configured.
 - HTTPS returns JSON with `"ok":true`.
 - `api` is healthy.
-- Caddy has a valid certificate for `parking.kuaidianfanfan.com`.
+- The independent Caddy service has a valid certificate for `parking.kuaidianfanfan.com`.
 
 ## WeChat mini program settings
 
