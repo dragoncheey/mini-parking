@@ -19,7 +19,10 @@ Page({
     canVote: false,
     upVoteClass: "",
     downVoteClass: "",
-    loading: false
+    userVote: null,
+    voteUp: 0,
+    voteDown: 0,
+    loading: true
   },
 
   onLoad(query) {
@@ -28,7 +31,17 @@ Page({
       Number(query.duration) || app.globalData.durationMinutes || DEFAULT_DURATION_MINUTES
     );
     app.globalData.durationMinutes = durationMinutes;
+    this._lotId = query.id;
+    this._durationMinutes = durationMinutes;
     this.loadDetail(query.id, durationMinutes);
+  },
+
+  onShow() {
+    // 从编辑页返回后刷新
+    if (this._needsReload) {
+      this._needsReload = false;
+      this.loadDetail(this._lotId, this._durationMinutes);
+    }
   },
 
   async loadDetail(id, durationMinutes) {
@@ -87,7 +100,10 @@ Page({
       evidencePhotoCount: evidence.photos ? evidence.photos.length : 0,
       canVote: Boolean(getLoggedInUser() && !lot.canEdit),
       upVoteClass: upClass,
-      downVoteClass: downClass
+      downVoteClass: downClass,
+      userVote: userVote || null,
+      voteUp: (lot.voteStats && lot.voteStats.up) || 0,
+      voteDown: (lot.voteStats && lot.voteStats.down) || 0
     });
   },
 
@@ -101,6 +117,7 @@ Page({
       wx.showToast({ title: "只能维护自己上报的信息", icon: "none" });
       return;
     }
+    this._needsReload = true;
     wx.navigateTo({ url: `/pages/add/add?id=${lot.id}` });
   },
 
@@ -108,6 +125,10 @@ Page({
     const voteValue = event.currentTarget.dataset.vote;
     const lot = this.data.lot;
     if (!lot) return;
+    if (voteValue === this.data.userVote) {
+      wx.showToast({ title: "已经评价过了", icon: "none" });
+      return;
+    }
 
     if (lot.canEdit) {
       wx.showToast({ title: "自己上报的信息不能评价", icon: "none" });
@@ -121,7 +142,15 @@ Page({
 
     try {
       await asyncVoteParkingLot(lot.id, voteValue);
+      app.globalData.parkingLotsDirty = true;
+      const previousVote = this.data.userVote;
+      const counts = { up: this.data.voteUp, down: this.data.voteDown };
+      if (previousVote && counts[previousVote] > 0) counts[previousVote] -= 1;
+      counts[voteValue] += 1;
       this.setData({
+        userVote: voteValue,
+        voteUp: counts.up,
+        voteDown: counts.down,
         upVoteClass: voteValue === "up" ? "is-active" : "",
         downVoteClass: voteValue === "down" ? "is-active" : ""
       });

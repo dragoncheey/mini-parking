@@ -1,334 +1,231 @@
 .vehicles-page {
   min-height: 100vh;
-  padding: 28rpx 28rpx calc(env(safe-area-inset-bottom) + 52rpx);
-  background: #f6f7f4;
+  padding: 24rpx 24rpx calc(180rpx + env(safe-area-inset-bottom));
+  background: #f2f4f3;
 }
 
-.vehicles-header,
-.current-card-top,
-.list-heading,
-.vehicle-card-head,
-.vehicle-actions,
-.plate-sheet-header,
-.plate-meta-row,
-.plate-benefit-row,
-.auto-type-row {
-  display: flex;
-  align-items: center;
+.is-pressed {
+  opacity: 0.75;
 }
 
 .vehicles-header {
-  justify-content: space-between;
-  gap: 20rpx;
-  padding: 8rpx 4rpx 10rpx;
-}
-
-.vehicles-header > view:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.vehicles-kicker,
-.vehicles-title,
-.vehicles-subtitle,
-.login-title,
-.login-copy,
-.current-label,
-.current-value,
-.current-copy,
-.list-kicker,
-.list-title,
-.plate-number,
-.vehicle-type-text,
-.sheet-kicker,
-.sheet-title {
-  display: block;
-}
-
-.vehicles-kicker,
-.list-kicker,
-.sheet-kicker {
-  color: #176b5b;
-  font-size: 20rpx;
-  font-weight: 900;
-  letter-spacing: 2rpx;
+  display: flex;
+  flex-direction: column;
+  padding: 12rpx 8rpx 28rpx;
 }
 
 .vehicles-title {
-  margin-top: 6rpx;
+  font-size: 44rpx;
+  font-weight: 800;
   color: #17201e;
-  font-size: 42rpx;
-  font-weight: 900;
-  line-height: 1.15;
 }
 
 .vehicles-subtitle {
-  margin-top: 8rpx;
-  color: #7b8783;
-  font-size: 22rpx;
+  margin-top: 10rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+  color: #74807c;
 }
 
-.vehicle-count-pill {
-  flex: 0 0 auto;
-  padding: 11rpx 16rpx;
-  border-radius: 999rpx;
-  color: #176b5b;
-  background: #e2f1eb;
-  font-size: 21rpx;
-  font-weight: 900;
-}
-
-.login-panel {
-  margin-top: 32rpx;
-  padding: 42rpx 32rpx 34rpx;
-  border: 1rpx solid #e0e6e2;
-  border-radius: 30rpx;
+/* 登录引导 */
+.login-panel,
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56rpx 40rpx;
+  border-radius: 32rpx;
   background: #ffffff;
   text-align: center;
 }
 
 .login-illustration {
+  width: 120rpx;
+  height: 120rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 112rpx;
-  height: 112rpx;
-  margin: 0 auto;
-  border-radius: 34rpx;
-  background: #e2f1eb;
-  transform: rotate(-5deg);
+  border-radius: 50%;
+  background: #e2f2ec;
 }
 
 .login-car {
-  color: #176b5b;
-  font-size: 36rpx;
-  font-weight: 900;
-  transform: rotate(5deg);
+  font-size: 56rpx;
 }
 
-.login-title {
-  margin-top: 26rpx;
-  color: #17201e;
+.login-title,
+.empty-title {
+  margin-top: 24rpx;
   font-size: 32rpx;
-  font-weight: 900;
+  font-weight: 700;
+  color: #17201e;
 }
 
-.login-copy {
-  max-width: 540rpx;
-  margin: 12rpx auto 0;
-  color: #798581;
-  font-size: 24rpx;
-  line-height: 1.55;
+.login-copy,
+.empty-copy {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+  color: #74807c;
 }
 
 .login-button {
+  margin-top: 36rpx;
   width: 100%;
-  margin-top: 28rpx;
-  border-radius: 20rpx;
-}
-
-.current-card {
-  position: relative;
-  margin-top: 26rpx;
-  padding: 28rpx;
-  overflow: hidden;
-  border-radius: 28rpx;
-  color: #ffffff;
-  background: linear-gradient(135deg, #183f36, #176b5b);
-  box-shadow: 0 16rpx 40rpx rgba(23, 73, 62, 0.18);
-}
-
-.current-card::after {
-  content: "";
-  position: absolute;
-  right: -60rpx;
-  bottom: -120rpx;
-  width: 280rpx;
-  height: 280rpx;
-  border: 38rpx solid rgba(255, 255, 255, 0.06);
-  border-radius: 50%;
-}
-
-.current-card-top {
-  position: relative;
-  z-index: 1;
-  justify-content: space-between;
-  gap: 18rpx;
-}
-
-.current-card-top > view:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.current-label {
-  color: rgba(255, 255, 255, 0.65);
-  font-size: 20rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
-}
-
-.current-value {
-  margin-top: 9rpx;
-  overflow: hidden;
-  font-size: 31rpx;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.current-check {
+  height: 88rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 54rpx;
-  height: 54rpx;
-  border-radius: 50%;
-  color: #176b5b;
-  background: #bce9d7;
-  font-size: 27rpx;
-  font-weight: 900;
+  border-radius: 999rpx;
+  background: #1a7f64;
+  color: #ffffff;
+  font-size: 29rpx;
+  font-weight: 700;
 }
 
-.current-copy {
-  position: relative;
-  z-index: 1;
-  margin-top: 16rpx;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 22rpx;
-}
-
-.list-section {
-  margin-top: 34rpx;
-}
-
-.list-heading {
-  justify-content: space-between;
-  gap: 18rpx;
-  margin-bottom: 18rpx;
-}
-
-.list-heading > view {
-  flex: 1;
-  min-width: 0;
-}
-
-.list-title {
-  margin-top: 5rpx;
-  color: #65716d;
-  font-size: 22rpx;
-}
-
-.add-entry-button {
-  flex: 0 0 190rpx;
-  width: 190rpx;
-  min-height: 66rpx;
-  padding: 0 14rpx;
-  border-radius: 18rpx;
-  font-size: 23rpx;
-}
-
+/* 车辆卡片 */
 .vehicle-card {
   position: relative;
-  margin-top: 16rpx;
-  padding: 26rpx;
-  overflow: hidden;
-  border: 1rpx solid #e0e6e2;
-  border-radius: 26rpx;
+  margin-bottom: 18rpx;
+  padding: 28rpx 24rpx;
+  border: 3rpx solid transparent;
+  border-radius: 28rpx;
   background: #ffffff;
-  box-shadow: 0 8rpx 24rpx rgba(31, 47, 43, 0.04);
-}
-
-.vehicle-card::after {
-  content: "";
-  position: absolute;
-  right: -30rpx;
-  top: -45rpx;
-  width: 150rpx;
-  height: 150rpx;
-  border-radius: 50%;
-  background: rgba(23, 107, 91, 0.05);
+  box-shadow: 0 4rpx 16rpx rgba(23, 32, 30, 0.04);
 }
 
 .vehicle-card.is-current {
-  border-color: #92c4b6;
-  background: #fbfefd;
-  box-shadow: 0 10rpx 28rpx rgba(23, 107, 91, 0.09);
+  border-color: #1a7f64;
 }
 
-.vehicle-card-main,
-.vehicle-actions {
-  position: relative;
-  z-index: 1;
+.vehicle-card-main {
+  display: flex;
+  align-items: center;
+  padding-right: 64rpx;
 }
 
-.vehicle-card-head {
-  justify-content: space-between;
-  gap: 16rpx;
+.plate-badge {
+  flex-shrink: 0;
+  min-width: 260rpx;
+  height: 76rpx;
+  padding: 0 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4rpx solid rgba(255, 255, 255, 0.9);
+  border-radius: 12rpx;
+  box-shadow: 0 0 0 2rpx #1d4fa3;
+  background: #1d4fa3;
 }
 
-.vehicle-card-head > view {
-  flex: 1;
-  min-width: 0;
+.plate-badge.is-new-energy {
+  box-shadow: 0 0 0 2rpx #3aa66b;
+  background: linear-gradient(180deg, #f4fbf6 0%, #7fd3a0 100%);
 }
 
 .plate-number {
+  font-size: 34rpx;
+  font-weight: 800;
+  letter-spacing: 3rpx;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.plate-badge.is-new-energy .plate-number {
   color: #17201e;
-  font-size: 39rpx;
-  font-weight: 900;
-  letter-spacing: 2rpx;
+}
+
+.vehicle-info {
+  flex: 1;
+  min-width: 0;
+  margin-left: 24rpx;
+  display: flex;
+  flex-direction: column;
 }
 
 .vehicle-type-text {
-  margin-top: 7rpx;
-  color: #7a8682;
-  font-size: 21rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #17201e;
 }
 
-.current-badge,
-.edit-hint {
-  flex: 0 0 auto;
-  font-size: 21rpx;
-  font-weight: 800;
+.vehicle-state {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: #8a9692;
 }
 
-.current-badge {
-  padding: 9rpx 14rpx;
+.vehicle-card.is-current .vehicle-state {
+  color: #1a7f64;
+  font-weight: 600;
+}
+
+.vehicle-radio {
+  flex-shrink: 0;
+  width: 40rpx;
+  height: 40rpx;
+  border: 3rpx solid #c9d2ce;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.vehicle-radio.is-on {
+  border: 12rpx solid #1a7f64;
+}
+
+.vehicle-more {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a9692;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.add-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(242, 244, 243, 0) 0%, #f2f4f3 30%);
+}
+
+.add-button {
+  width: 100%;
+  height: 92rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 999rpx;
-  color: #176b5b;
-  background: #e2f1eb;
+  background: #1a7f64;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 700;
+  box-shadow: 0 10rpx 24rpx rgba(26, 127, 100, 0.24);
 }
 
-.edit-hint {
-  color: #81908b;
-}
-
-.vehicle-actions {
-  justify-content: space-between;
-  gap: 12rpx;
-  margin-top: 20rpx;
-  padding-top: 18rpx;
-  border-top: 1rpx solid #edf0ed;
-}
-
-.small-button {
-  flex: 1;
-  min-width: 0;
-  min-height: 58rpx;
-  border-radius: 16rpx;
+/* 车牌录入面板 */
+.sheet-kicker {
+  display: block;
+  color: #1a7f64;
   font-size: 22rpx;
+  font-weight: 700;
 }
 
-.delete-button {
-  color: #8d5b48;
-  background: #f4ece8;
+.sheet-title {
+  display: block;
 }
 
-.current-action-note {
-  flex: 1;
-  color: #176b5b;
-  font-size: 21rpx;
-  font-weight: 800;
+.plate-sheet-header {
+  display: flex;
+  align-items: center;
 }
 
 .plate-overlay {
@@ -349,7 +246,7 @@
   padding: 30rpx 24rpx calc(env(safe-area-inset-bottom) + 28rpx);
   overflow-y: auto;
   border-radius: 38rpx 38rpx 0 0;
-  background: #f6f7f4;
+  background: #f2f4f3;
 }
 
 .plate-sheet-header {
@@ -407,8 +304,8 @@
 
 .plate-slot.is-filled {
   color: #ffffff;
-  border-color: #176b5b;
-  background: #176b5b;
+  border-color: #1a7f64;
+  background: #1a7f64;
 }
 
 .plate-slot.is-active {
@@ -442,13 +339,13 @@
   height: 28rpx;
   border-radius: 50%;
   color: #ffffff;
-  background: #176b5b;
+  background: #1a7f64;
   font-size: 18rpx;
   font-weight: 900;
 }
 
 .auto-type-value {
-  color: #176b5b;
+  color: #1a7f64;
   font-weight: 900;
 }
 
@@ -498,7 +395,7 @@
   margin-top: 20rpx;
   border-radius: 20rpx;
   color: #ffffff;
-  background: #176b5b;
+  background: #1a7f64;
   box-shadow: 0 10rpx 24rpx rgba(23, 107, 91, 0.18);
   font-size: 28rpx;
   font-weight: 900;

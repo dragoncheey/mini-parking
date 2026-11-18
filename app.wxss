@@ -1,6 +1,6 @@
 page {
   min-height: 100%;
-  background: #f6f7f4;
+  background: #f2f4f3;
   color: #17201e;
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   letter-spacing: 0;
@@ -72,7 +72,7 @@ button::after {
 
 .primary-button {
   color: #ffffff;
-  background: #176b5b;
+  background: #1a7f64;
   box-shadow: 0 10rpx 24rpx rgba(23, 107, 91, 0.18);
 }
 

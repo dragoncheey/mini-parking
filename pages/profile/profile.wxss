@@ -1,6 +1,6 @@
 .profile-page {
   padding: 28rpx 28rpx calc(env(safe-area-inset-bottom) + 48rpx);
-  background: #f6f7f4;
+  background: #f2f4f3;
 }
 
 .profile-hero {
@@ -9,7 +9,7 @@
   padding: 34rpx;
   border-radius: 32rpx;
   color: #ffffff;
-  background: linear-gradient(145deg, #173e35 0%, #176b5b 62%, #288473 100%);
+  background: linear-gradient(145deg, #173e35 0%, #1a7f64 62%, #288473 100%);
   box-shadow: 0 20rpx 50rpx rgba(23, 73, 62, 0.2);
 }
 
@@ -51,7 +51,7 @@
   overflow: hidden;
   border: 5rpx solid rgba(255, 255, 255, 0.22);
   border-radius: 50%;
-  color: #176b5b;
+  color: #1a7f64;
   background: #e3f1ec;
   font-size: 38rpx;
   font-weight: 900;
@@ -209,7 +209,7 @@
 }
 
 .section-kicker {
-  color: #176b5b;
+  color: #1a7f64;
   font-size: 20rpx;
   font-weight: 900;
   letter-spacing: 2rpx;
@@ -250,7 +250,7 @@
   height: 58rpx;
   border-radius: 18rpx;
   color: #ffffff;
-  background: #176b5b;
+  background: #1a7f64;
   font-size: 25rpx;
   font-weight: 900;
 }
@@ -327,7 +327,7 @@
 
 .setting-value {
   flex: 0 0 auto;
-  color: #176b5b;
+  color: #1a7f64;
   font-size: 21rpx;
   font-weight: 800;
 }

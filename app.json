@@ -8,9 +8,9 @@
   ],
   "window": {
     "navigationBarTitleText": "省心停车",
-    "navigationBarBackgroundColor": "#f6f7f4",
+    "navigationBarBackgroundColor": "#f2f4f3",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f6f7f4"
+    "backgroundColor": "#f2f4f3"
   },
   "permission": {
     "scope.userLocation": {

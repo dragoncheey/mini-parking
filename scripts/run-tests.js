@@ -141,45 +141,49 @@ function testUiLayoutStructure() {
   const profileWxml = readProjectFile("pages/profile/profile.wxml");
   const appJson = JSON.parse(readProjectFile("app.json"));
 
-  assert.match(indexWxml, /class="workbench-summary/);
-  assert.match(indexWxml, /class="workbench-config-row/);
-  assert.match(indexWxml, /class="first-recommendation-preview/);
-  assert.match(indexWxml, /class="map-top-actions/);
-  assert.match(indexWxml, /class="map-add-action/);
-  assert.match(indexWxml, /<view[\s\S]*class="map-add-action/);
-  assert.doesNotMatch(indexWxml, /<button[\s\S]*class="map-add-action/);
-  assert.match(indexWxml, /class="sort-compact-trigger/);
-  assert.match(indexWxml, /class="recommendation-sort-menu/);
-  assert.match(indexWxml, /class="duration-quick-panel/);
+  const indexJson = JSON.parse(readProjectFile("pages/index/index.json"));
+  assert.match(indexWxml, /class="destination-box[^\n]+bindtap="chooseDestination"/);
+  assert.match(indexWxml, /class="avatar-button[^\n]+bindtap="goProfile"/);
   assert.match(indexWxml, /bindtap="selectDurationPreset"/);
   assert.match(indexWxml, /mode="multiSelector"/);
-  assert.match(indexWxml, /class="scope-chip/);
-  assert.match(indexWxml, /class="map-account-chip[^\n]+bindtap="goProfile"/);
+  assert.match(indexWxml, /bindmarkertap="onMarkerTap"/);
+  assert.match(indexWxml, /class="map-share"[^\n]+bindtap="goAdd"/);
+  assert.doesNotMatch(indexWxml, /<button[\s\S]*class="map-share/);
+  assert.match(indexWxml, /class="sort-tab /);
+  assert.match(indexWxml, /bindtap="chooseParkingScope"/);
+  assert.match(indexWxml, /scroll-into-view="\{\{scrollIntoId\}\}"/);
   assert.match(indexWxml, /bindscrolltolower="loadMoreRecommendations"/);
+  assert.match(indexWxml, /bindrefresherrefresh="onListRefresh"/);
   assert.match(indexWxml, /wx:for="\{\{visibleRecommendations\}\}"/);
+  assert.match(indexWxml, /id="lot-\{\{item.id\}\}"/);
+  assert.match(indexWxml, /catchtap="openNavigation"/);
   assert.match(indexWxml, /已经看完全部推荐/);
-  assert.match(indexWxml, /class="map-mini-icon expand-mini-icon/);
-  assert.match(indexWxml, /class="map-mini-icon locate-mini-icon/);
-  assert.doesNotMatch(indexWxml, /余位最多/);
+  assert.doesNotMatch(indexWxml, /bottom-sheet|sheet-drag-zone|enterMapMode/);
   assert.doesNotMatch(indexWxml, /availabilityText/);
-  assert.doesNotMatch(indexWxml, /compact-top-actions/);
-  assert.strictEqual((indexWxml.match(/class="quick-control/g) || []).length, 0);
-  assert.strictEqual((indexWxml.match(/class="quick-summary-item/g) || []).length, 3);
-  assert.match(indexWxss, /\.map-round-button\s*\{[\s\S]*width: 60rpx;[\s\S]*height: 60rpx;[\s\S]*border-radius: 50%;/);
+  assert.match(indexWxss, /\.home\s*\{[\s\S]*height: 100vh;/);
+  assert.strictEqual(indexJson.disableScroll, true);
+  assert.notStrictEqual(indexJson.enablePullDownRefresh, true);
 
   assert.match(detailWxml, /class="detail-hero/);
   assert.match(detailWxml, /class="detail-primary-panel/);
+  assert.match(detailWxml, /class="bottom-actions[\s\S]*bindtap="openNavigation"/);
 
   assert.match(vehiclesWxml, /class="vehicles-header/);
   assert.match(vehiclesWxml, /class="vehicle-card-main/);
   assert.match(vehiclesWxml, /前往“我的”登录/);
   assert.doesNotMatch(vehiclesWxml, /bindtap="login"/);
+  assert.match(vehiclesWxml, /class="vehicle-card[^"]*"[\s\S]*?bindtap="useVehicle"/);
+  assert.match(vehiclesWxml, /catchtap="openVehicleMenu"/);
+  assert.doesNotMatch(vehiclesWxml, /catchtap="removeVehicle"/);
 
   assert.match(addWxml, /class="form-step/);
   assert.match(addWxml, /class="step-number/);
   assert.match(addWxml, /class="submit-dock/);
   assert.match(addWxml, /前往“我的”登录/);
   assert.doesNotMatch(addWxml, /bindtap="loginAndContinue"/);
+  assert.match(addWxml, /bindtap="selectChargeType"/);
+  assert.match(addWxml, /wx:for="\{\{pricePreview\}\}"/);
+  assert.match(addWxml, /bindtap="toggleMore"/);
 
   assert.ok(appJson.pages.includes("pages/profile/profile"));
   assert.match(profileWxml, /class="profile-hero/);

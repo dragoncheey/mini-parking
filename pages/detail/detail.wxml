@@ -1,58 +1,41 @@
-<view class="page detail-page">
+<view class="detail-page">
   <block wx:if="{{lot}}">
     <view class="detail-hero">
       <view class="detail-hero-main">
-        <text class="detail-kicker">停车场详情</text>
         <text class="detail-title">{{lot.name}}</text>
         <text class="detail-address">{{lot.address}}</text>
-        <view class="tag-row">
+        <view wx:if="{{detail.tags.length}}" class="tag-row">
           <text
             wx:for="{{detail.tags}}"
             wx:key="*this"
-            class="pill"
+            class="detail-tag {{item === '建议复核' ? 'is-warn' : ''}}"
           >{{item}}</text>
         </view>
       </view>
-      <button wx:if="{{lot.canEdit}}" class="ghost-button edit-button" bindtap="goEdit">维护</button>
+      <view wx:if="{{lot.canEdit}}" class="edit-button" bindtap="goEdit">编辑</view>
     </view>
 
     <view class="detail-primary-panel">
-      <view class="fee-summary">
-        <text class="panel-label">预计停车 {{detail.durationText}}</text>
-        <text class="panel-label">当前车辆 {{currentVehicleText}}</text>
-        <text class="fee-value">{{detail.feeText}}</text>
+      <view class="fee-head">
+        <text class="fee-label">停 {{detail.durationText}} 预计</text>
+        <text class="fee-vehicle">{{currentVehicle ? currentVehicleText : '默认计费'}}</text>
       </view>
-      <button class="primary-button nav-button" bindtap="openNavigation">导航</button>
-    </view>
-
-    <view class="section trust-section">
-      <view class="section-heading-row">
-        <text class="section-title">数据可信</text>
-        <text class="confidence-value">{{lot.confidence}}</text>
-      </view>
-      <view class="owner-row">
-        <view class="owner-avatar" style="background: {{lot.owner.avatarColor}}">
-          <image wx:if="{{lot.owner.avatarUrl}}" class="owner-avatar-image" src="{{lot.owner.avatarUrl}}" mode="aspectFill" />
-          <text wx:else>{{lot.owner.avatarText}}</text>
+      <text class="fee-value {{detail.fee === 0 ? 'is-free' : ''}}">{{detail.feeText}}</text>
+      <text class="fee-reason">{{detail.reason}}</text>
+      <view class="stat-row">
+        <view class="stat-item">
+          <text class="stat-value">{{detail.distanceText}}</text>
+          <text class="stat-label">距目的地</text>
         </view>
-        <view class="owner-info">
-          <text class="owner-label">{{sourceText}}</text>
-          <text class="owner-name">{{lot.owner.nickname}}</text>
+        <view class="stat-item">
+          <text class="stat-value">{{detail.walkingMinutes}} 分钟</text>
+          <text class="stat-label">步行</text>
+        </view>
+        <view class="stat-item">
+          <text class="stat-value">{{lot.confidence}}</text>
+          <text class="stat-label">可信度</text>
         </view>
       </view>
-      <text class="body-text">基础 {{lot.rawConfidence}}，赞 {{lot.voteStats.up}}，踩 {{lot.voteStats.down}}</text>
-      <text wx:if="{{lot.confidenceResetAt}}" class="body-hint">最近维护后已重置信任，需要用户重新确认。</text>
-      <view wx:if="{{canVote}}" class="vote-row">
-        <button class="secondary-button vote-button {{upVoteClass}}" data-vote="up" bindtap="vote">信息准确</button>
-        <button class="danger-button vote-button {{downVoteClass}}" data-vote="down" bindtap="vote">需要复核</button>
-      </view>
-      <text wx:elif="{{lot.canEdit}}" class="body-hint">你是上报人，可以维护信息；其他用户会对准确性进行评价。</text>
-      <text wx:else class="body-hint">登录后可对这条信息点赞或踩，帮助排序更可靠。</text>
-    </view>
-
-    <view class="section">
-      <text class="section-title">推荐理由</text>
-      <text class="body-text">{{detail.reason}}</text>
     </view>
 
     <view class="section">
@@ -62,14 +45,15 @@
     </view>
 
     <view class="section">
-      <text class="section-title">停车入口</text>
-      <text class="body-text">{{lot.access.entrance}}</text>
-      <text class="body-hint">距目的地 {{detail.distanceText}}，步行约 {{detail.walkingMinutes}} 分钟</text>
+      <text class="section-title">怎么进</text>
+      <text class="body-text">{{lot.access.entrance || '暂无入口说明'}}</text>
     </view>
 
     <view class="section">
-      <text class="section-title">现场图片</text>
-      <text class="body-text">{{evidenceStatus}}</text>
+      <view class="section-heading-row">
+        <text class="section-title">现场图片</text>
+        <text class="section-side">{{evidenceStatus}}</text>
+      </view>
       <view wx:if="{{evidencePhotoCount}}" class="photo-grid">
         <image
           wx:for="{{evidencePhotos}}"
@@ -84,25 +68,46 @@
       <text wx:else class="body-hint">暂未上传图片。</text>
     </view>
 
-    <view class="section">
-      <text class="section-title">地图数据</text>
-      <view class="data-row">
-        <text class="data-label">坐标</text>
-        <text class="data-value">{{lot.location.latitude}}, {{lot.location.longitude}}</text>
+    <view class="section trust-section">
+      <view class="section-heading-row">
+        <text class="section-title">信息靠谱吗</text>
+        <text class="section-side">赞 {{voteUp}} · 踩 {{voteDown}}</text>
       </view>
-      <view class="data-row">
-        <text class="data-label">数据来源</text>
-        <text class="data-value">{{sourceText}}，{{lot.owner.nickname}}</text>
+      <view class="owner-row">
+        <view class="owner-avatar" style="background: {{lot.owner.avatarColor}}">
+          <image wx:if="{{lot.owner.avatarUrl}}" class="owner-avatar-image" src="{{lot.owner.avatarUrl}}" mode="aspectFill" />
+          <text wx:else>{{lot.owner.avatarText}}</text>
+        </view>
+        <view class="owner-info">
+          <text class="owner-name">{{lot.owner.nickname}}</text>
+          <text class="owner-label">{{sourceText}} · 基础可信度 {{lot.rawConfidence}}</text>
+        </view>
       </view>
+      <text wx:if="{{lot.confidenceResetAt}}" class="body-hint">最近维护后已重置信任，需要用户重新确认。</text>
+      <view wx:if="{{canVote}}" class="vote-row">
+        <view class="vote-button is-up {{upVoteClass}}" data-vote="up" bindtap="vote">👍 信息准确</view>
+        <view class="vote-button is-down {{downVoteClass}}" data-vote="down" bindtap="vote">⚠️ 需要复核</view>
+      </view>
+      <text wx:elif="{{lot.canEdit}}" class="body-hint">这是你分享的停车场，其他用户会评价它的准确性。</text>
+      <text wx:else class="body-hint">登录后可以评价这条信息，帮助大家排序更准。</text>
     </view>
 
     <view class="bottom-actions">
-      <button class="secondary-button" bindtap="copyLocation">复制位置</button>
-      <button class="ghost-button" open-type="share">分享</button>
+      <view class="bar-button" bindtap="copyLocation">
+        <text class="bar-icon">⧉</text>
+        <text>复制位置</text>
+      </view>
+      <button class="bar-button bar-share" open-type="share">
+        <text class="bar-icon">↗</text>
+        <text>分享</text>
+      </button>
+      <view class="nav-primary" bindtap="openNavigation" hover-class="is-pressed">导航去这里</view>
     </view>
   </block>
 
+  <view wx:elif="{{loading}}" class="detail-loading">加载中…</view>
+
   <view wx:else class="empty">
-    没找到这个停车场，请检查线上接口或稍后重试。
+    没找到这个停车场，可能已被删除，或网络暂时不可用。
   </view>
 </view>

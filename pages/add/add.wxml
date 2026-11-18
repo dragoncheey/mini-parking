@@ -1,82 +1,67 @@
-<view class="page add-page">
+<view class="add-page">
   <view class="intro">
-    <text class="intro-kicker">{{isEditing ? '信息维护' : '共建停车数据'}}</text>
     <text class="intro-title">{{pageTitle}}</text>
     <text class="intro-text">{{introText}}</text>
-    <view class="intro-flow">
-      <text>照片</text><text class="flow-line"></text>
-      <text>地点</text><text class="flow-line"></text>
-      <text>收费</text><text class="flow-line"></text>
-      <text>发布</text>
-    </view>
   </view>
 
   <view wx:if="{{loginRequired}}" class="login-panel">
-    <text class="login-title">需要登录后上报</text>
-    <text class="login-copy">登录后保存的停车场会展示你的头像来源，后续也只有你可以维护修改。</text>
-    <button class="primary-button login-button" bindtap="goProfile">前往“我的”登录</button>
+    <text class="login-title">登录后才能分享</text>
+    <text class="login-copy">分享的停车场会显示你的头像作为来源，之后也只有你能修改。</text>
+    <button class="login-button" bindtap="goProfile">前往“我的”登录</button>
   </view>
 
   <block wx:else>
-    <view class="form-step form-section">
-      <view class="step-number">01</view>
-      <view class="step-content">
-        <view class="section-row">
-          <text class="section-title">拍照识别</text>
-          <view class="section-actions">
-            <button class="secondary-button small-button" bindtap="captureEvidence">拍照/上传</button>
-            <button class="ghost-button small-button" disabled="{{recognizeDisabled}}" bindtap="recognizeEvidence">识别</button>
-          </view>
+    <!-- 1 拍照识别 -->
+    <view class="form-step">
+      <view class="step-head">
+        <text class="step-number">1</text>
+        <text class="step-title">拍收费牌，自动填写</text>
+        <text class="step-optional">可跳过</text>
+      </view>
+
+      <view class="photo-grid">
+        <view wx:for="{{evidencePhotos}}" wx:key="path" class="photo-item">
+          <image class="photo-thumb" src="{{item.path}}" mode="aspectFill" data-index="{{index}}" bindtap="previewEvidence" />
+          <view class="remove-photo" data-index="{{index}}" catchtap="removeEvidence">×</view>
+          <view wx:if="{{item.uploadError}}" class="photo-upload-status">未上传</view>
         </view>
-        <text class="section-description">先拍收费牌或入口，系统可自动提取关键信息。</text>
-        <text class="body-hint">{{recognitionStatus}}，{{photoCount}} 张照片</text>
-        <text class="body-copy">{{recognitionHint}}</text>
-        <text wx:if="{{recognitionWarningText}}" class="warning-text">{{recognitionWarningText}}</text>
-        <view wx:if="{{photoCount}}" class="photo-grid">
-          <view
-            wx:for="{{evidencePhotos}}"
-            wx:key="path"
-            class="photo-item"
-          >
-            <image class="photo-thumb" src="{{item.path}}" mode="aspectFill" data-index="{{index}}" bindtap="previewEvidence" />
-            <view class="remove-photo" data-index="{{index}}" catchtap="removeEvidence">×</view>
-            <view wx:if="{{item.uploadError}}" class="photo-upload-status">未上传</view>
-          </view>
+        <view class="photo-add" bindtap="captureEvidence" hover-class="is-pressed">
+          <text class="photo-add-icon">📷</text>
+          <text class="photo-add-text">{{photoCount ? '再拍一张' : '拍照/相册'}}</text>
         </view>
       </view>
+
+      <button
+        wx:if="{{photoCount}}"
+        class="recognize-button"
+        disabled="{{recognizeDisabled}}"
+        loading="{{isRecognizing}}"
+        bindtap="recognizeEvidence"
+      >✨ 识别照片并自动填写</button>
+      <text class="step-hint">{{photoCount ? recognitionStatus + ' · ' + recognitionHint : '拍收费牌最有用，入口照片能帮别人找到位置。'}}</text>
+      <text wx:if="{{recognitionWarningText}}" class="warning-text">⚠️ {{recognitionWarningText}}</text>
     </view>
 
-    <view class="form-step form-section">
-      <view class="step-number">02</view>
-      <view class="step-content">
-        <text class="section-title">基础信息</text>
-        <text class="section-description">名称、地址和入口提示会直接展示给其他车主。</text>
-        <view class="field">
-          <text class="field-label">停车场名称</text>
-          <input class="field-input" value="{{form.name}}" data-key="name" bindinput="onInput" placeholder="例如：星河广场地下停车场" />
-        </view>
-        <view class="field">
-          <text class="field-label">地址</text>
-          <input class="field-input" value="{{form.address}}" data-key="address" bindinput="onInput" placeholder="停车场入口或详细地址" />
-        </view>
-        <view class="field">
-          <text class="field-label">入口提示</text>
-          <input class="field-input" value="{{form.entrance}}" data-key="entrance" bindinput="onInput" placeholder="例如：商场东门旁下坡入口" />
-        </view>
+    <!-- 2 位置 -->
+    <view class="form-step">
+      <view class="step-head">
+        <text class="step-number">2</text>
+        <text class="step-title">停车场在哪</text>
       </view>
-    </view>
 
-    <view class="form-step form-section">
-      <view class="step-number">03</view>
-      <view class="step-content">
-        <view class="section-row">
-          <text class="section-title">地图数据</text>
-          <view class="section-actions">
-            <button class="ghost-button small-button" bindtap="chooseParkingLocation">地图选点</button>
-            <button class="ghost-button small-button" bindtap="useCurrentLocation">当前位置</button>
-          </view>
+      <view class="location-card {{form.latitude && form.longitude ? 'is-set' : ''}}" bindtap="chooseParkingLocation" hover-class="is-pressed">
+        <text class="location-pin">📍</text>
+        <view class="location-copy">
+          <text class="location-title">{{form.latitude && form.longitude ? '已选位置' : '在地图上选择位置'}}</text>
+          <text class="location-sub">{{form.latitude && form.longitude ? (form.address || form.latitude + ', ' + form.longitude) : '会自动填好名称和地址'}}</text>
         </view>
-        <text class="section-description">推荐使用地图选点，坐标会自动回填。</text>
+        <text class="location-action">{{form.latitude && form.longitude ? '修改' : '选择'}} ›</text>
+      </view>
+      <view class="location-links">
+        <text class="text-link" bindtap="useCurrentLocation">我就在停车场，用当前位置</text>
+        <text class="text-link is-muted" bindtap="toggleCoords">{{showCoords ? '收起坐标' : '手动填坐标'}}</text>
+      </view>
+      <view wx:if="{{showCoords}}" class="two-column">
         <view class="field">
           <text class="field-label">纬度</text>
           <input class="field-input" type="digit" value="{{form.latitude}}" data-key="latitude" bindinput="onInput" placeholder="31.23041" />
@@ -86,187 +71,189 @@
           <input class="field-input" type="digit" value="{{form.longitude}}" data-key="longitude" bindinput="onInput" placeholder="121.47370" />
         </view>
       </view>
+
+      <view class="field">
+        <text class="field-label">名称</text>
+        <input class="field-input" value="{{form.name}}" data-key="name" bindinput="onInput" placeholder="例如：星河广场地下停车场" />
+      </view>
+      <view class="field">
+        <text class="field-label">地址</text>
+        <input class="field-input" value="{{form.address}}" data-key="address" bindinput="onInput" placeholder="停车场入口或详细地址" />
+      </view>
+      <view class="field">
+        <text class="field-label">怎么进 <text class="field-optional">选填</text></text>
+        <input class="field-input" value="{{form.entrance}}" data-key="entrance" bindinput="onInput" placeholder="例如：商场东门旁下坡入口" />
+      </view>
     </view>
 
-    <view class="form-step form-section">
-      <view class="step-number">04</view>
-      <view class="step-content">
-        <view class="section-row">
-          <text class="section-title">收费规则</text>
-          <text class="section-tag">{{chargeTypeLabel}}</text>
+    <!-- 3 收费 -->
+    <view class="form-step">
+      <view class="step-head">
+        <text class="step-number">3</text>
+        <text class="step-title">怎么收费</text>
+      </view>
+
+      <view class="charge-tabs">
+        <view
+          wx:for="{{chargeTypeOptions}}"
+          wx:key="value"
+          class="charge-tab {{index === chargeTypeIndex ? 'is-active' : ''}}"
+          data-index="{{index}}"
+          bindtap="selectChargeType"
+        >{{item.label}}</view>
+      </view>
+      <text class="step-hint">{{chargeTypeHint}}</text>
+
+      <view class="two-column">
+        <view class="field">
+          <text class="field-label">免费时长（分钟）</text>
+          <input class="field-input" type="number" value="{{form.freeMinutes}}" data-key="freeMinutes" bindinput="onInput" placeholder="0" />
         </view>
-        <text class="section-description">选择最接近现场收费牌的规则，再填写对应价格。</text>
-
-        <picker mode="selector" range="{{chargeTypeOptions}}" range-key="label" value="{{chargeTypeIndex}}" bindchange="onChargeTypeChange">
-          <view class="pricing-type-card">
-            <view>
-              <text class="pricing-type-title">{{chargeTypeLabel}}</text>
-              <text class="pricing-type-copy">{{chargeTypeHint}}</text>
-            </view>
-            <text class="pricing-type-action">切换</text>
-          </view>
-        </picker>
-
-        <view class="pricing-subsection">
-          <text class="subsection-title">基础规则</text>
-          <view class="two-column">
-            <view class="field">
-              <text class="field-label">免费分钟</text>
-              <input class="field-input" type="number" value="{{form.freeMinutes}}" data-key="freeMinutes" bindinput="onInput" placeholder="0" />
-            </view>
-            <view class="field">
-              <text class="field-label">单日封顶</text>
-              <input class="field-input" type="digit" value="{{form.maxDailyPrice}}" data-key="maxDailyPrice" bindinput="onInput" placeholder="可选" />
-            </view>
-          </view>
+        <view class="field">
+          <text class="field-label">每天封顶（元）<text class="field-optional">选填</text></text>
+          <input class="field-input" type="digit" value="{{form.maxDailyPrice}}" data-key="maxDailyPrice" bindinput="onInput" placeholder="不封顶" />
         </view>
+      </view>
 
-        <view class="pricing-subsection">
-          <view class="subsection-row">
-            <text class="subsection-title">计费方式</text>
-            <text class="subsection-hint" wx:if="{{isLadderChargeType}}">最后一条截止时间留空表示之后</text>
-          </view>
-
-          <view wx:if="{{isFlatChargeType}}">
-            <view class="two-column">
-              <view class="field">
-                <text class="field-label">包段分钟</text>
-                <input class="field-input" type="number" value="{{form.flatDurationMinutes}}" data-key="flatDurationMinutes" bindinput="onInput" placeholder="1440" />
-              </view>
-              <view class="field">
-                <text class="field-label">包段价格</text>
-                <input class="field-input" type="digit" value="{{form.flatPrice}}" data-key="flatPrice" bindinput="onInput" placeholder="例如 20" />
-              </view>
-            </view>
-            <view class="switch-row inline-switch">
-              <view>
-                <text class="field-label">超出后重复计费</text>
-                <text class="switch-hint">关闭后表示只收一次包段费用</text>
-              </view>
-              <switch checked="{{form.flatRepeat}}" data-key="flatRepeat" bindchange="onSwitchChange" color="#166a5b" />
-            </view>
-          </view>
-
-          <view wx:elif="{{isLadderChargeType}}" class="ladder-list">
-            <view
-              wx:for="{{form.ladderRows}}"
-              wx:key="id"
-              class="ladder-row"
-            >
-              <view class="ladder-row-head">
-                <text class="ladder-row-title">阶梯 {{index + 1}}</text>
-                <button class="ghost-button ladder-remove" data-index="{{index}}" bindtap="removeLadderRow">删除</button>
-              </view>
-              <view class="three-column">
-                <view class="field">
-                  <text class="field-label">截止分钟</text>
-                  <input class="field-input" type="number" value="{{item.untilMinutes}}" data-index="{{index}}" data-key="untilMinutes" bindinput="onLadderInput" placeholder="留空=之后" />
-                </view>
-                <view class="field">
-                  <text class="field-label">计费单位</text>
-                  <input class="field-input" type="number" value="{{item.billingUnitMinutes}}" data-index="{{index}}" data-key="billingUnitMinutes" bindinput="onLadderInput" placeholder="60" />
-                </view>
-                <view class="field">
-                  <text class="field-label">单价</text>
-                  <input class="field-input" type="digit" value="{{item.unitPrice}}" data-index="{{index}}" data-key="unitPrice" bindinput="onLadderInput" placeholder="元" />
-                </view>
-              </view>
-            </view>
-            <button class="ghost-button add-ladder-button" bindtap="addLadderRow">新增阶梯</button>
-          </view>
-
-          <view wx:else class="two-column">
-            <view class="field">
-              <text class="field-label">计费单位分钟</text>
-              <input class="field-input" type="number" value="{{form.billingUnitMinutes}}" data-key="billingUnitMinutes" bindinput="onInput" placeholder="60" />
-            </view>
-            <view class="field">
-              <text class="field-label">每单位价格</text>
-              <input class="field-input" type="digit" value="{{form.unitPrice}}" data-key="unitPrice" bindinput="onInput" placeholder="例如 5" />
-            </view>
-          </view>
-        </view>
-
-        <view class="pricing-subsection">
-          <text class="subsection-title">补充说明</text>
+      <view wx:if="{{isFlatChargeType}}">
+        <view class="two-column">
           <view class="field">
-            <text class="field-label">最低收费</text>
-            <input class="field-input" type="digit" value="{{form.minCharge}}" data-key="minCharge" bindinput="onInput" placeholder="可选" />
+            <text class="field-label">每次时长（分钟）</text>
+            <input class="field-input" type="number" value="{{form.flatDurationMinutes}}" data-key="flatDurationMinutes" bindinput="onInput" placeholder="1440" />
           </view>
           <view class="field">
-            <text class="field-label">规则备注</text>
-            <textarea class="field-textarea compact-textarea" value="{{form.notes}}" data-key="notes" bindinput="onInput" placeholder="例如：1 小时免费，之后每小时 5 元" />
+            <text class="field-label">每次价格（元）</text>
+            <input class="field-input" type="digit" value="{{form.flatPrice}}" data-key="flatPrice" bindinput="onInput" placeholder="例如 20" />
           </view>
         </view>
-
-        <view class="vehicle-rule-box">
-          <view class="switch-row">
-            <view>
-              <text class="field-label">新能源小型车优惠</text>
-              <text class="switch-hint">只填与基础规则不同的部分，空着就继承基础规则</text>
-            </view>
-            <switch checked="{{form.newEnergyEnabled}}" data-key="newEnergyEnabled" bindchange="onSwitchChange" color="#166a5b" />
+        <view class="switch-row">
+          <view class="switch-copy">
+            <text class="switch-title">超时后再收一次</text>
+            <text class="switch-hint">关闭表示不管停多久只收一次</text>
           </view>
-          <view wx:if="{{form.newEnergyEnabled}}" class="vehicle-rule-fields">
-            <view class="two-column">
-              <view class="field">
-                <text class="field-label">新能源免费分钟</text>
-                <input class="field-input" type="number" value="{{form.newEnergyFreeMinutes}}" data-key="newEnergyFreeMinutes" bindinput="onInput" />
-              </view>
-              <view class="field">
-                <text class="field-label">新能源单日封顶</text>
-                <input class="field-input" type="digit" value="{{form.newEnergyMaxDailyPrice}}" data-key="newEnergyMaxDailyPrice" bindinput="onInput" placeholder="默认同基础" />
-              </view>
-              <view class="field">
-                <text class="field-label">新能源计费单位</text>
-                <input class="field-input" type="number" value="{{form.newEnergyBillingUnitMinutes}}" data-key="newEnergyBillingUnitMinutes" bindinput="onInput" placeholder="默认同基础" />
-              </view>
-              <view class="field">
-                <text class="field-label">新能源单价</text>
-                <input class="field-input" type="digit" value="{{form.newEnergyUnitPrice}}" data-key="newEnergyUnitPrice" bindinput="onInput" placeholder="默认同基础" />
-              </view>
-              <view class="field" wx:if="{{isFlatChargeType}}">
-                <text class="field-label">新能源包段分钟</text>
-                <input class="field-input" type="number" value="{{form.newEnergyFlatDurationMinutes}}" data-key="newEnergyFlatDurationMinutes" bindinput="onInput" placeholder="默认同基础" />
-              </view>
-              <view class="field" wx:if="{{isFlatChargeType}}">
-                <text class="field-label">新能源包段价格</text>
-                <input class="field-input" type="digit" value="{{form.newEnergyFlatPrice}}" data-key="newEnergyFlatPrice" bindinput="onInput" placeholder="默认同基础" />
-              </view>
+          <switch checked="{{form.flatRepeat}}" data-key="flatRepeat" bindchange="onSwitchChange" color="#1a7f64" />
+        </view>
+      </view>
+
+      <view wx:elif="{{isLadderChargeType}}" class="ladder-list">
+        <view wx:for="{{form.ladderRows}}" wx:key="id" class="ladder-row">
+          <view class="ladder-row-head">
+            <text class="ladder-row-title">第 {{index + 1}} 段</text>
+            <text class="ladder-remove" data-index="{{index}}" bindtap="removeLadderRow">删除</text>
+          </view>
+          <view class="three-column">
+            <view class="field">
+              <text class="field-label">停到第几分钟</text>
+              <input class="field-input" type="number" value="{{item.untilMinutes}}" data-index="{{index}}" data-key="untilMinutes" bindinput="onLadderInput" placeholder="空=之后" />
             </view>
             <view class="field">
-              <text class="field-label">新能源备注</text>
-              <textarea class="field-textarea compact-textarea" value="{{form.newEnergyNotes}}" data-key="newEnergyNotes" bindinput="onInput" placeholder="例如：新能源 2 小时免费，之后按基础规则" />
+              <text class="field-label">每(分钟)</text>
+              <input class="field-input" type="number" value="{{item.billingUnitMinutes}}" data-index="{{index}}" data-key="billingUnitMinutes" bindinput="onLadderInput" placeholder="60" />
+            </view>
+            <view class="field">
+              <text class="field-label">收(元)</text>
+              <input class="field-input" type="digit" value="{{item.unitPrice}}" data-index="{{index}}" data-key="unitPrice" bindinput="onLadderInput" placeholder="5" />
             </view>
           </view>
+        </view>
+        <view class="add-ladder-button" bindtap="addLadderRow">＋ 再加一段</view>
+      </view>
+
+      <view wx:else class="two-column">
+        <view class="field">
+          <text class="field-label">每（分钟）</text>
+          <input class="field-input" type="number" value="{{form.billingUnitMinutes}}" data-key="billingUnitMinutes" bindinput="onInput" placeholder="60" />
+        </view>
+        <view class="field">
+          <text class="field-label">收（元）</text>
+          <input class="field-input" type="digit" value="{{form.unitPrice}}" data-key="unitPrice" bindinput="onInput" placeholder="例如 5" />
+        </view>
+      </view>
+
+      <view class="price-preview">
+        <text class="preview-title">按这个规则，大概要付</text>
+        <view class="preview-row">
+          <view wx:for="{{pricePreview}}" wx:key="label" class="preview-item">
+            <text class="preview-fee">{{item.feeText}}</text>
+            <text class="preview-label">停{{item.label}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="switch-row energy-row">
+        <view class="switch-copy">
+          <text class="switch-title">新能源车有优惠</text>
+          <text class="switch-hint">只填和上面不一样的，空着就按上面的规则</text>
+        </view>
+        <switch checked="{{form.newEnergyEnabled}}" data-key="newEnergyEnabled" bindchange="onSwitchChange" color="#1a7f64" />
+      </view>
+      <view wx:if="{{form.newEnergyEnabled}}" class="energy-fields">
+        <view class="two-column">
+          <view class="field">
+            <text class="field-label">免费时长（分钟）</text>
+            <input class="field-input" type="number" value="{{form.newEnergyFreeMinutes}}" data-key="newEnergyFreeMinutes" bindinput="onInput" placeholder="120" />
+          </view>
+          <view class="field">
+            <text class="field-label">每天封顶（元）</text>
+            <input class="field-input" type="digit" value="{{form.newEnergyMaxDailyPrice}}" data-key="newEnergyMaxDailyPrice" bindinput="onInput" placeholder="同上" />
+          </view>
+          <view class="field" wx:if="{{!isFlatChargeType}}">
+            <text class="field-label">每（分钟）</text>
+            <input class="field-input" type="number" value="{{form.newEnergyBillingUnitMinutes}}" data-key="newEnergyBillingUnitMinutes" bindinput="onInput" placeholder="同上" />
+          </view>
+          <view class="field" wx:if="{{!isFlatChargeType}}">
+            <text class="field-label">收（元）</text>
+            <input class="field-input" type="digit" value="{{form.newEnergyUnitPrice}}" data-key="newEnergyUnitPrice" bindinput="onInput" placeholder="同上" />
+          </view>
+          <view class="field" wx:if="{{isFlatChargeType}}">
+            <text class="field-label">每次时长（分钟）</text>
+            <input class="field-input" type="number" value="{{form.newEnergyFlatDurationMinutes}}" data-key="newEnergyFlatDurationMinutes" bindinput="onInput" placeholder="同上" />
+          </view>
+          <view class="field" wx:if="{{isFlatChargeType}}">
+            <text class="field-label">每次价格（元）</text>
+            <input class="field-input" type="digit" value="{{form.newEnergyFlatPrice}}" data-key="newEnergyFlatPrice" bindinput="onInput" placeholder="同上" />
+          </view>
+        </view>
+        <view class="field">
+          <text class="field-label">新能源说明 <text class="field-optional">选填</text></text>
+          <input class="field-input" value="{{form.newEnergyNotes}}" data-key="newEnergyNotes" bindinput="onInput" placeholder="例如：新能源 2 小时免费" />
         </view>
       </view>
     </view>
 
-    <view class="form-step form-section">
-      <view class="step-number">05</view>
-      <view class="step-content">
-        <text class="section-title">现实因素</text>
-        <text class="section-description">补充车位和步行情况，让推荐更贴近真实体验。</text>
+    <!-- 更多 -->
+    <view class="form-step more-step">
+      <view class="more-toggle" bindtap="toggleMore">
+        <text class="more-title">更多信息</text>
+        <text class="more-sub">车位情况、最低收费、备注等</text>
+        <text class="more-caret">{{showMore ? '收起' : '展开'}}</text>
+      </view>
+      <block wx:if="{{showMore}}">
         <view class="field">
           <text class="field-label">车位情况</text>
           <picker mode="selector" range="{{availabilityOptions}}" range-key="label" value="{{availabilityIndex}}" bindchange="onAvailabilityChange">
-            <view class="picker-value">{{availabilityLabel}}</view>
+            <view class="picker-value">{{availabilityLabel}} <text class="picker-caret">▾</text></view>
           </picker>
         </view>
-        <view class="field">
-          <text class="field-label">额外步行分钟</text>
-          <input class="field-input" type="number" value="{{form.walkingPenaltyMinutes}}" data-key="walkingPenaltyMinutes" bindinput="onInput" />
+        <view class="two-column">
+          <view class="field">
+            <text class="field-label">最低收费（元）</text>
+            <input class="field-input" type="digit" value="{{form.minCharge}}" data-key="minCharge" bindinput="onInput" placeholder="无" />
+          </view>
+          <view class="field">
+            <text class="field-label">出来还要走（分钟）</text>
+            <input class="field-input" type="number" value="{{form.walkingPenaltyMinutes}}" data-key="walkingPenaltyMinutes" bindinput="onInput" placeholder="0" />
+          </view>
         </view>
-      </view>
+        <view class="field">
+          <text class="field-label">收费备注</text>
+          <textarea class="field-textarea" value="{{form.notes}}" data-key="notes" bindinput="onInput" placeholder="例如：夜间 20:00 后每次 10 元" />
+        </view>
+      </block>
     </view>
 
     <view class="submit-dock">
-      <view class="submit-copy">
-        <text class="submit-title">确认信息准确</text>
-        <text class="submit-hint">发布后仍可在详情页维护</text>
-      </view>
-      <button class="primary-button save-button" loading="{{loading}}" bindtap="save">{{saveButtonText}}</button>
+      <button class="save-button" loading="{{loading}}" bindtap="save">{{saveButtonText}}</button>
     </view>
   </block>
 </view>

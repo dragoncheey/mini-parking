@@ -48,6 +48,72 @@ function formatDistance(distanceMeters) {
   return `${Math.max(1, Math.round(distance))} m`;
 }
 
+function getDefaultWxClient() {
+  if (typeof wx !== "undefined") {
+    return wx;
+  }
+
+  throw new Error("wx client is unavailable");
+}
+
+function requirePrivacyAuthorization(wxClient) {
+  if (!wxClient || typeof wxClient.requirePrivacyAuthorize !== "function") {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    wxClient.requirePrivacyAuthorize({
+      success: resolve,
+      fail: reject
+    });
+  });
+}
+
+function ensurePrivacyAuthorization(wxClient) {
+  if (!wxClient || typeof wxClient.requirePrivacyAuthorize !== "function") {
+    return Promise.resolve();
+  }
+
+  if (typeof wxClient.getPrivacySetting !== "function") {
+    return requirePrivacyAuthorization(wxClient);
+  }
+
+  return new Promise((resolve, reject) => {
+    wxClient.getPrivacySetting({
+      success(res) {
+        if (!res || res.needAuthorization !== true) {
+          resolve();
+          return;
+        }
+
+        requirePrivacyAuthorization(wxClient).then(resolve, reject);
+      },
+      fail() {
+        requirePrivacyAuthorization(wxClient).then(resolve, reject);
+      }
+    });
+  });
+}
+
+function requestCurrentLocation(options) {
+  const sourceOptions = options || {};
+  const wxClient = sourceOptions.wxClient || getDefaultWxClient();
+  const locationOptions = {};
+  Object.keys(sourceOptions).forEach((key) => {
+    if (key !== "wxClient") {
+      locationOptions[key] = sourceOptions[key];
+    }
+  });
+
+  return ensurePrivacyAuthorization(wxClient).then(() => new Promise((resolve, reject) => {
+    wxClient.getLocation({
+      ...locationOptions,
+      success: resolve,
+      fail: reject
+    });
+  }));
+}
+
 function openParkingLocation(lot) {
   if (!lot || !isValidCoordinate(lot.location)) {
     wx.showToast({
@@ -125,5 +191,6 @@ module.exports = {
   estimateWalkingMinutes,
   formatDistance,
   isValidCoordinate,
-  openParkingLocation
+  openParkingLocation,
+  requestCurrentLocation
 };

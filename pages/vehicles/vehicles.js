@@ -114,13 +114,13 @@ Page({
     keyboardTitle: "选择省份简称",
     showAddPanel: false,
     panelMode: "add",
-    panelTitle: "添加爱车",
+    panelTitle: "添加车辆",
     confirmButtonText: "确定",
     editingVehicleId: "",
     vehicles: [],
     currentVehicleId: "",
     currentVehicleLabel: "未设置",
-    emptyText: "暂无车辆，请先录入车牌。",
+    emptyText: "添加车牌后，会自动识别燃油车或新能源车并按对应价格计费。",
     pageTitle: "我的爱车",
     loading: false
   },
@@ -161,7 +161,7 @@ Page({
       currentVehicleLabel: currentVehicle
         ? `${currentVehicle.plateDisplay} · ${currentVehicle.vehicleTypeLabel}`
         : "未设置",
-      emptyText: vehicles.length ? "" : "暂无车辆，请先录入车牌。"
+      emptyText: vehicles.length ? "" : "添加车牌后，会自动识别燃油车或新能源车并按对应价格计费。"
     });
   },
 
@@ -173,7 +173,7 @@ Page({
     this.setData({
       showAddPanel: true,
       panelMode: "add",
-      panelTitle: "添加爱车",
+      panelTitle: "添加车辆",
       confirmButtonText: "确定",
       editingVehicleId: "",
       form: buildEmptyForm(),
@@ -201,7 +201,7 @@ Page({
     this.setData({
       showAddPanel: false,
       panelMode: "add",
-      panelTitle: "添加爱车",
+      panelTitle: "添加车辆",
       confirmButtonText: "确定",
       editingVehicleId: "",
       form: buildEmptyForm()
@@ -369,12 +369,47 @@ Page({
 
   useVehicle(event) {
     const id = event.currentTarget.dataset.id;
+    if (`${id}` === `${this.data.currentVehicleId}`) return;
+    const vehicle = this.data.vehicles.find((item) => `${item.id}` === `${id}`);
+    if (!vehicle) return;
     setCurrentVehicleId(id);
-    this.refresh();
+    this.setData({
+      currentVehicleId: vehicle.id,
+      currentVehicleLabel: `${vehicle.plateDisplay} · ${vehicle.vehicleTypeLabel}`
+    });
+    wx.showToast({ title: `已切换到 ${vehicle.plateDisplay}`, icon: "none" });
   },
 
-  async removeVehicle(event) {
+  openVehicleMenu(event) {
     const id = event.currentTarget.dataset.id;
+    const vehicle = this.data.vehicles.find((item) => `${item.id}` === `${id}`);
+    if (!vehicle) return;
+    wx.showActionSheet({
+      itemList: ["编辑车牌", "删除车辆"],
+      itemColor: "#17201e",
+      success: (res) => {
+        if (res.tapIndex === 0) {
+          this.openEditPanel({ currentTarget: { dataset: { id } } });
+        } else if (res.tapIndex === 1) {
+          this.confirmRemoveVehicle(vehicle);
+        }
+      }
+    });
+  },
+
+  confirmRemoveVehicle(vehicle) {
+    wx.showModal({
+      title: "删除车辆",
+      content: `确定删除 ${vehicle.plateDisplay} 吗？`,
+      confirmText: "删除",
+      confirmColor: "#d4380d",
+      success: (res) => {
+        if (res.confirm) this.removeVehicle(vehicle.id);
+      }
+    });
+  },
+
+  async removeVehicle(id) {
     this.setData({ loading: true });
     try {
       await asyncDeleteVehicle(id);

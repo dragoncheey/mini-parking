@@ -1,4 +1,5 @@
 {
-  "navigationBarTitleText": "想停哪里",
-  "enablePullDownRefresh": true
+  "navigationBarTitleText": "省心停车",
+  "navigationBarBackgroundColor": "#ffffff",
+  "disableScroll": true
 }

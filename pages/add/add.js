@@ -10,6 +10,14 @@ const { requestParkingRecognition } = require("../../utils/api");
 const LOGIN_KEY = "parkingLoginState";
 const CURRENT_USER_KEY = "parkingCurrentUser";
 const EVIDENCE_IMAGE_QUALITY = 70;
+const { calculateParkingFee, formatMoney } = require("../../utils/pricing");
+const { requestCurrentLocation } = require("../../utils/location");
+const PREVIEW_DURATIONS = [
+  { minutes: 60, label: "1小时" },
+  { minutes: 120, label: "2小时" },
+  { minutes: 240, label: "4小时" },
+  { minutes: 480, label: "8小时" }
+];
 
 const availabilityOptions = [
   { label: "车位较稳", value: "high" },
@@ -19,9 +27,9 @@ const availabilityOptions = [
 ];
 
 const chargeTypeOptions = [
-  { label: "按时计费", value: "hourly", hint: "免费后按固定时间单价累计" },
-  { label: "按次/包段", value: "flat", hint: "一次收费或按 24 小时重复" },
-  { label: "阶梯计费", value: "ladder", hint: "不同停车时段不同价格" }
+  { label: "按时计费", value: "hourly", hint: "例如：免费 15 分钟，之后每小时 5 元" },
+  { label: "按次收费", value: "flat", hint: "例如：一次 10 元，或每 24 小时 20 元" },
+  { label: "阶梯计费", value: "ladder", hint: "例如：前 2 小时每小时 5 元，之后每小时 8 元" }
 ];
 
 function numberFromForm(value, fallback) {
@@ -199,9 +207,9 @@ Page({
     loginRequired: true,
     isEditing: false,
     editId: "",
-    pageTitle: "录入停车场",
-    introText: "可通过拍照和定位采集停车场来源，再人工复核收费规则。系统会按目的地距离、预计停车时长、车位情况和数据可信度综合推荐。",
-    saveButtonText: "保存并参与推荐",
+    pageTitle: "分享停车场",
+    introText: "拍一张收费牌，大部分信息会自动填好。你的分享会帮附近车主少花冤枉钱。",
+    saveButtonText: "发布",
     evidencePhotos: [],
     photoCount: 0,
     recognitionStatus: "未采集照片",
@@ -211,6 +219,9 @@ Page({
     recognizeDisabled: true,
     recognitionWarnings: [],
     recognitionWarningText: "",
+    showMore: false,
+    showCoords: false,
+    pricePreview: [],
     loading: false
   },
 
@@ -234,9 +245,9 @@ Page({
         loginRequired: true,
         isEditing: Boolean(editId),
         editId: editId || "",
-        pageTitle: editId ? "维护停车场" : "录入停车场",
+        pageTitle: editId ? "编辑停车场" : "分享停车场",
         introText: "登录后才能上报或维护停车场信息。",
-        saveButtonText: editId ? "保存修改" : "保存并参与推荐"
+        saveButtonText: editId ? "保存修改" : "发布"
       });
       return;
     }
@@ -251,9 +262,9 @@ Page({
     this.setData({
       isEditing: false,
       editId: "",
-      pageTitle: "录入停车场",
-      introText: "可通过拍照和定位采集停车场来源，再人工复核收费规则。系统会按目的地距离、预计停车时长、车位情况和数据可信度综合推荐。",
-      saveButtonText: "保存并参与推荐",
+      pageTitle: "分享停车场",
+      introText: "拍一张收费牌，大部分信息会自动填好。你的分享会帮附近车主少花冤枉钱。",
+      saveButtonText: "发布",
       availabilityIndex: 1,
       availabilityLabel: availabilityOptions[1].label,
       chargeTypeIndex: 0,
@@ -270,7 +281,7 @@ Page({
       canRecognize: false,
       recognizeDisabled: true,
       form: buildEmptyForm()
-    });
+    }, () => this.updatePricePreview());
   },
 
   goProfile() {
@@ -312,7 +323,7 @@ Page({
     this.setData({
       isEditing: true,
       editId,
-      pageTitle: "维护停车场",
+      pageTitle: "编辑停车场",
       introText: "你正在维护自己上报的停车场。保存修改后，旧的点赞/踩会清空，可信度会回到 50，等待其他用户重新确认。",
       saveButtonText: "保存修改",
       availabilityIndex,
@@ -333,24 +344,51 @@ Page({
       canRecognize: photos.length > 0,
       recognizeDisabled: photos.length <= 0,
       form
-    });
+    }, () => this.updatePricePreview());
   },
 
   onInput(event) {
     const key = event.currentTarget.dataset.key;
-    this.setData({ [`form.${key}`]: event.detail.value });
+    this.setData({ [`form.${key}`]: event.detail.value }, () => this.updatePricePreview());
+  },
+
+  updatePricePreview() {
+    if (!this.data.form) return;
+    let pricing;
+    try {
+      pricing = this.buildApiPayload().pricing;
+    } catch (error) {
+      return;
+    }
+    const pricePreview = PREVIEW_DURATIONS.map((item) => ({
+      label: item.label,
+      feeText: formatMoney(calculateParkingFee(item.minutes, pricing))
+    }));
+    this.setData({ pricePreview });
+  },
+
+  toggleMore() {
+    this.setData({ showMore: !this.data.showMore });
+  },
+
+  toggleCoords() {
+    this.setData({ showCoords: !this.data.showCoords });
+  },
+
+  selectChargeType(event) {
+    this.onChargeTypeChange({ detail: { value: Number(event.currentTarget.dataset.index) } });
   },
 
   onSwitchChange(event) {
     const key = event.currentTarget.dataset.key;
-    this.setData({ [`form.${key}`]: Boolean(event.detail.value) });
+    this.setData({ [`form.${key}`]: Boolean(event.detail.value) }, () => this.updatePricePreview());
   },
 
   onLadderInput(event) {
     const index = Number(event.currentTarget.dataset.index);
     const key = event.currentTarget.dataset.key;
     if (!Number.isFinite(index) || !key) return;
-    this.setData({ [`form.ladderRows[${index}].${key}`]: event.detail.value });
+    this.setData({ [`form.ladderRows[${index}].${key}`]: event.detail.value }, () => this.updatePricePreview());
   },
 
   addLadderRow() {
@@ -360,13 +398,13 @@ Page({
       billingUnitMinutes: "60",
       unitPrice: ""
     });
-    this.setData({ "form.ladderRows": rows });
+    this.setData({ "form.ladderRows": rows }, () => this.updatePricePreview());
   },
 
   removeLadderRow(event) {
     const index = Number(event.currentTarget.dataset.index);
     const rows = (this.data.form.ladderRows || []).filter((item, itemIndex) => itemIndex !== index);
-    this.setData({ "form.ladderRows": rows.length ? rows : defaultLadderRows() });
+    this.setData({ "form.ladderRows": rows.length ? rows : defaultLadderRows() }, () => this.updatePricePreview());
   },
 
   onAvailabilityChange(event) {
@@ -392,22 +430,18 @@ Page({
 
     this.setData({
       ...updates
-    });
+    }, () => this.updatePricePreview());
   },
 
   useCurrentLocation() {
-    wx.getLocation({
-      type: "gcj02",
-      success: (res) => {
-        this.setData({
-          "form.latitude": `${res.latitude}`,
-          "form.longitude": `${res.longitude}`
-        });
-        wx.showToast({ title: "已填入坐标", icon: "success" });
-      },
-      fail: () => {
-        wx.showToast({ title: "无法获取定位", icon: "none" });
-      }
+    requestCurrentLocation({ type: "gcj02" }).then((res) => {
+      this.setData({
+        "form.latitude": `${res.latitude}`,
+        "form.longitude": `${res.longitude}`
+      });
+      wx.showToast({ title: "已用当前位置", icon: "success" });
+    }).catch(() => {
+      wx.showToast({ title: "无法获取定位", icon: "none" });
     });
   },
 
@@ -422,8 +456,9 @@ Page({
         });
         wx.showToast({ title: "已选择位置", icon: "success" });
       },
-      fail: () => {
-        wx.showToast({ title: "未选择位置", icon: "none" });
+      fail: (error) => {
+        if (error && error.errMsg && error.errMsg.indexOf("cancel") >= 0) return;
+        wx.showToast({ title: "打开地图失败", icon: "none" });
       }
     });
   },
@@ -666,7 +701,7 @@ Page({
       }
     }
 
-    this.setData(updates);
+    this.setData(updates, () => this.updatePricePreview());
   },
 
   async recognizeEvidence() {
@@ -872,6 +907,7 @@ Page({
         await asyncSaveUserParkingLot(apiPayload);
         wx.showToast({ title: "已保存", icon: "success" });
       }
+      getApp().globalData.parkingLotsDirty = true;
       setTimeout(() => wx.navigateBack(), 500);
     } catch (e) {
       console.error("Save failed:", e.message);
