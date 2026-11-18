@@ -86,6 +86,7 @@ Production API traffic is served from `https://parking.kuaidianfanfan.com`.
 - Runtime: Docker Compose on the self-owned server
 - HTTPS/reverse proxy: an independently managed Caddy service on the server
 - Database and evidence photos: hosted Supabase
+- Auto deploy: pushes to `codex/self-hosted-deployment` that touch the backend run `.github/workflows/deploy-api.yml` (test → rsync → `docker compose up --build`)
 - Deployment runbook: `docs/self-hosted-deployment.md`
 
 Tencent CloudBase is no longer part of the production runtime.

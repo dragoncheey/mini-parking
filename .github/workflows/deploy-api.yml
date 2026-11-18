@@ -1,0 +1,130 @@
+name: Deploy API
+
+# 推送后端相关文件到 codex/self-hosted-deployment 时，测试通过后自动部署到自有服务器。
+# 也可以在 Actions 页面手动触发（workflow_dispatch）。
+#
+# 需要在仓库 Settings → Secrets and variables → Actions 配置：
+#   Secrets:
+#     DEPLOY_HOST         服务器地址，例如 49.64.86.64
+#     DEPLOY_USER         SSH 用户，例如 deploy
+#     DEPLOY_SSH_KEY      该用户的 SSH 私钥（专用于部署）
+#     DEPLOY_KNOWN_HOSTS  `ssh-keyscan -p <端口> <服务器>` 的输出，用于校验服务器指纹
+#   Variables（可选）:
+#     DEPLOY_PORT         SSH 端口，默认 22
+#     DEPLOY_PATH         服务器上的部署目录，默认 /opt/mini-parking
+#     HEALTHCHECK_URL     部署后从外网检查的地址，默认 https://parking.kuaidianfanfan.com/health
+
+on:
+  push:
+    branches:
+      - codex/self-hosted-deployment
+    paths:
+      - "server/**"
+      - "utils/**"
+      - "Dockerfile"
+      - "compose.yaml"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/mini-parking' }}
+      HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL || 'https://parking.kuaidianfanfan.com/health' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing secret $name (see header of .github/workflows/deploy-api.yml)"
+              exit 1
+            fi
+          done
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            Port $DEPLOY_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 15
+            ConnectTimeout 20
+          EOF
+          ssh deploy-target "test -d '$DEPLOY_PATH' && test -f '$DEPLOY_PATH/.env.server'" \
+            || { echo "::error::$DEPLOY_PATH or $DEPLOY_PATH/.env.server not found on server"; exit 1; }
+
+      - name: Sync files
+        run: |
+          # 只同步构建镜像需要的文件；服务器上的 .env.server 和其他文件保持不动。
+          rsync -az --delete server/ "deploy-target:$DEPLOY_PATH/server/"
+          rsync -az --delete utils/ "deploy-target:$DEPLOY_PATH/utils/"
+          rsync -az Dockerfile compose.yaml package.json package-lock.json .dockerignore "deploy-target:$DEPLOY_PATH/"
+          ssh deploy-target "cd '$DEPLOY_PATH' && printf '%s\n' '${{ github.sha }}' > DEPLOYED_REVISION"
+
+      - name: Build and restart
+        run: |
+          ssh deploy-target "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          docker compose --env-file .env.server up -d --build --remove-orphans
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/health >/dev/null; then
+              echo "API healthy (revision $(cat DEPLOYED_REVISION))"
+              docker image prune -f >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy in 60s" >&2
+          docker compose ps >&2
+          docker compose logs --tail=100 api >&2
+          exit 1
+          EOF
+
+      - name: Check public endpoint
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 15 "$HEALTHCHECK_URL"; then
+              echo
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::warning::Public health check $HEALTHCHECK_URL failed (server-local check passed)"

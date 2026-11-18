@@ -88,26 +88,69 @@ Before first production traffic:
 2. Confirm `SUPABASE_STORAGE_BUCKET` exists or let the API create it.
 3. Keep the bucket public if evidence images need to render directly in the mini program.
 
-## Upgrade
+## Automatic deployment (GitHub Actions)
+
+Pushing changes under `server/`, `utils/`, `Dockerfile`, `compose.yaml` or `package*.json` to
+`codex/self-hosted-deployment` runs `.github/workflows/deploy-api.yml`:
+
+1. `npm ci && npm test` on Node 22.
+2. rsync of `server/`, `utils/`, `Dockerfile`, `compose.yaml`, `package*.json`, `.dockerignore` to the server.
+   `.env.server` and any other server-only files are never touched.
+3. `docker compose --env-file .env.server up -d --build`, then waits for `http://127.0.0.1:8787/health`.
+   On failure it prints `docker compose logs` in the job output.
+4. Checks the public `https://parking.kuaidianfanfan.com/health`.
+
+The deployed commit is written to `/opt/mini-parking/DEPLOYED_REVISION`.
+It can also be run manually from the Actions tab (**Deploy API → Run workflow**).
+
+### One-time setup
+
+On your Mac, create a key used only for deployment:
 
 ```bash
-cd /opt/mini-parking
-git rev-parse HEAD
-git pull --ff-only
-docker compose --env-file .env.server up -d --build
-docker compose ps
-curl -fsS https://parking.kuaidianfanfan.com/health
+ssh-keygen -t ed25519 -N "" -C github-actions-deploy -f ~/.ssh/mini_parking_deploy
 ```
 
-Record the previous commit before each upgrade so rollback is quick.
+Copy `scripts/setup-deploy-user.sh` to the server and run it as root with the **public** key:
+
+```bash
+scp scripts/setup-deploy-user.sh root@49.64.86.64:/tmp/
+ssh root@49.64.86.64 "bash /tmp/setup-deploy-user.sh \"$(cat ~/.ssh/mini_parking_deploy.pub)\""
+```
+
+This installs rsync, creates a `deploy` user in the `docker` group, hands `/opt/mini-parking` to it and
+makes `.env.server` readable only by that user.
+
+Add the repository secrets (GitHub → Settings → Secrets and variables → Actions), or with `gh`:
+
+```bash
+gh secret set DEPLOY_HOST -R dragoncheey/mini-parking -b 49.64.86.64
+gh secret set DEPLOY_USER -R dragoncheey/mini-parking -b deploy
+gh secret set DEPLOY_SSH_KEY -R dragoncheey/mini-parking < ~/.ssh/mini_parking_deploy
+ssh-keyscan -t ed25519,rsa,ecdsa 49.64.86.64 2>/dev/null | gh secret set DEPLOY_KNOWN_HOSTS -R dragoncheey/mini-parking
+```
+
+Run `ssh-keyscan` from a network without a fake-IP proxy, or run it on the server itself against `localhost`
+and replace `localhost` with `49.64.86.64`, so the fingerprint is the server's real host key.
+
+Optional repository variables: `DEPLOY_PORT` (default `22`), `DEPLOY_PATH` (default `/opt/mini-parking`),
+`HEALTHCHECK_URL` (default `https://parking.kuaidianfanfan.com/health`).
+
+## Manual upgrade
+
+If Actions is unavailable, sync the same files by hand and rebuild:
+
+```bash
+rsync -az --delete server/ deploy@49.64.86.64:/opt/mini-parking/server/
+rsync -az --delete utils/ deploy@49.64.86.64:/opt/mini-parking/utils/
+rsync -az Dockerfile compose.yaml package.json package-lock.json .dockerignore deploy@49.64.86.64:/opt/mini-parking/
+ssh deploy@49.64.86.64 "cd /opt/mini-parking && docker compose --env-file .env.server up -d --build"
+curl -fsS https://parking.kuaidianfanfan.com/health
+```
 
 ## Rollback
 
-```bash
-cd /opt/mini-parking
-git checkout <previous-good-commit>
-docker compose --env-file .env.server up -d --build
-curl -fsS https://parking.kuaidianfanfan.com/health
-```
+Re-run the **Deploy API** workflow for the last good commit (Actions → the earlier successful run →
+**Re-run all jobs**), or push a revert commit. Check `/opt/mini-parking/DEPLOYED_REVISION` to see what is live.
 
 Database migrations are not part of this deployment, so application rollback does not require a Supabase data rollback.
